@@ -972,7 +972,12 @@ int main(int argc, char* argv[])
 		// SDL3GameEngine::update() owns the pause so state stays consistent.
 		SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
 #endif
-		if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+		// GeneralsX @feature Android port 28/08/2026 Initialize the gamepad
+		// subsystem alongside video/audio. SDL_INIT_GAMEPAD implies
+		// SDL_INIT_JOYSTICK; it succeeds with zero controllers connected (the
+		// gamepad event translator in SDL3GameEngine.cpp simply never sees
+		// events in that case), so this is safe for players without one.
+		if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
 			fprintf(stderr, "FATAL: Failed to initialize SDL3: %s\n", SDL_GetError());
 			return 1;
 		}

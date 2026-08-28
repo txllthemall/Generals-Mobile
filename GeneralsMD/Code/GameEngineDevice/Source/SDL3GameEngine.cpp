@@ -1187,6 +1187,272 @@ void applyPendingCameraMotion()
 	}
 }
 
+	// ---------------------------------------------------------------------------
+	// Gamepad input (Android)
+	//
+	// GeneralsX @feature Android port 28/08/2026 SDL3 game controllers
+	// (Xbox / PlayStation / Switch Pro / generic HID pads) drive the exact
+	// same two bridges the touch translator above uses -- the raw mouse
+	// GameMessage stream (pushMousePosition/pushMouseButton) for the cursor
+	// and clicks, and the direct camera calls (applyCameraPan/applyCameraZoom)
+	// for pan and zoom -- plus SDL3Keyboard's own event pipeline for keys.
+	// Nothing downstream of this file knows a gamepad exists.
+	//
+	// Default mapping:
+	//   Right stick              -> virtual mouse cursor
+	//   A / Cross                -> left click (hold + right stick = drag-select box)
+	//   B / Circle               -> right click
+	//   X / Square, Y / Triangle -> the X and Y keys (rebindable in game options)
+	//   Start                    -> Escape (pause menu)
+	//   Select / Share / Back    -> Space
+	//   D-pad                    -> arrow keys
+	//   Left stick               -> camera pan (scales with the touch Pan speed slider)
+	//   L1 / R1                  -> zoom out / in (hold)
+	// ---------------------------------------------------------------------------
+	struct GamepadState {
+		bool active = false;        // any gamepad event seen since launch
+		bool cursorPlaced = false;  // virtual cursor has a real position
+		float cursorX = 0.0f, cursorY = 0.0f;
+		float stickX = 0.0f, stickY = 0.0f;   // right stick -> cursor
+		float panX = 0.0f, panY = 0.0f;       // left stick -> camera pan
+		bool leftHeld = false, rightHeld = false;
+		bool zoomInHeld = false, zoomOutHeld = false;
+		Uint64 lastApplyTicks = 0;
+	};
+	GamepadState s_gamepad;
+
+	const float GAMEPAD_DEADZONE = 0.18f;
+	const float GAMEPAD_CURSOR_SPEED_PX_PER_SEC = 1500.0f;
+	const float GAMEPAD_PAN_SPEED_PX_PER_SEC = 1100.0f;
+	// One full second held == one PC wheel tick of the standard
+	// ZoomHeightPerSecond rate (ZOOM_HEIGHT_PER_PIXEL above is that rate
+	// divided by this many pixels).
+	const float GAMEPAD_ZOOM_PX_PER_SEC = ZOOM_PX_PER_TICK;
+
+	// Radial dead zone + squared response curve: fine positioning near the
+	// center, full authority at the rim, drift-proof everywhere else.
+	float gamepadStickValue(Sint16 raw)
+	{
+		const float value = raw / 32767.0f;
+		const float magnitude = SDL_fabsf(value);
+		if (magnitude <= GAMEPAD_DEADZONE) {
+			return 0.0f;
+		}
+		const float normalized = (magnitude - GAMEPAD_DEADZONE) / (1.0f - GAMEPAD_DEADZONE);
+		return (value < 0.0f ? -1.0f : 1.0f) * normalized * normalized;
+	}
+
+	float gamepadClamp(float value, float lo, float hi)
+	{
+		return value < lo ? lo : (value > hi ? hi : value);
+	}
+
+	// Emit a synthetic keyboard event through the exact pipeline a hardware
+	// keyboard uses (SDL3Keyboard::addSDLEvent -> translateScanCodeToKeyVal),
+	// so D-pad/Start/Back honor whatever the player bound in game options.
+	void pushGamepadKey(SDL_Window *window, SDL_Scancode scancode, bool down)
+	{
+		if (!TheKeyboard) {
+			return;
+		}
+		SDL3Keyboard *keyboard = dynamic_cast<SDL3Keyboard *>(TheKeyboard);
+		if (!keyboard) {
+			return;
+		}
+		SDL_Event keyEvent;
+		memset(&keyEvent, 0, sizeof(keyEvent));
+		keyEvent.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+		keyEvent.key.timestamp = SDL_GetTicksNS();
+		if (window) {
+			keyEvent.key.windowID = SDL_GetWindowID(window);
+		}
+		keyEvent.key.scancode = scancode;
+		keyEvent.key.down = down;
+		keyEvent.key.repeat = false;
+		keyboard->addSDLEvent(&keyEvent);
+	}
+
+	// Give the virtual cursor a starting position the first time the player
+	// touches the stick or a button: window center, the same recenter point
+	// the touch edge-guard uses. No position message here on purpose -- the
+	// first real motion or click sends one.
+	void placeGamepadCursorIfNeeded(SDL_Window *window)
+	{
+		if (s_gamepad.cursorPlaced || !window) {
+			return;
+		}
+		int winW = 0, winH = 0;
+		SDL_GetWindowSize(window, &winW, &winH);
+		if (winW <= 0 || winH <= 0) {
+			return;
+		}
+		s_gamepad.cursorX = winW * 0.5f;
+		s_gamepad.cursorY = winH * 0.5f;
+		s_gamepad.cursorPlaced = true;
+	}
+
+	void pushGamepadMouseButton(GameMessage::Type type)
+	{
+		pushMousePosition(s_gamepad.cursorX, s_gamepad.cursorY);
+		pushMouseButton(type, s_gamepad.cursorX, s_gamepad.cursorY);
+	}
+
+	void releaseAllGamepadHolds()
+	{
+		// The controller is gone (or being torn down); release everything held
+		// so no click, zoom, pan, or key latches on forever.
+		if (s_gamepad.leftHeld) {
+			s_gamepad.leftHeld = false;
+			if (s_gamepad.cursorPlaced) {
+				pushGamepadMouseButton(GameMessage::MSG_RAW_MOUSE_LEFT_BUTTON_UP);
+			}
+		}
+		if (s_gamepad.rightHeld) {
+			s_gamepad.rightHeld = false;
+			if (s_gamepad.cursorPlaced) {
+				pushGamepadMouseButton(GameMessage::MSG_RAW_MOUSE_RIGHT_BUTTON_UP);
+			}
+		}
+		s_gamepad.stickX = s_gamepad.stickY = 0.0f;
+		s_gamepad.panX = s_gamepad.panY = 0.0f;
+		s_gamepad.zoomInHeld = s_gamepad.zoomOutHeld = false;
+	}
+
+	void handleGamepadEvent(SDL_Window *window, const SDL_Event &event)
+	{
+		s_gamepad.active = true;
+
+		switch (event.type) {
+			case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+				const float value = gamepadStickValue(event.gaxis.value);
+				switch (event.gaxis.axis) {
+					case SDL_GAMEPAD_AXIS_RIGHTX: s_gamepad.stickX = value; break;
+					case SDL_GAMEPAD_AXIS_RIGHTY: s_gamepad.stickY = value; break;
+					case SDL_GAMEPAD_AXIS_LEFTX: s_gamepad.panX = value; break;
+					case SDL_GAMEPAD_AXIS_LEFTY: s_gamepad.panY = value; break;
+					default: break;  // analog triggers unused (shoulder buttons own zoom)
+				}
+				break;
+			}
+
+			case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+			case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+				const bool down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+				placeGamepadCursorIfNeeded(window);
+				switch (event.gbutton.button) {
+					case SDL_GAMEPAD_BUTTON_SOUTH:  // A / Cross: left click, hold to drag-select
+						if (down != s_gamepad.leftHeld) {
+							s_gamepad.leftHeld = down;
+							if (s_gamepad.cursorPlaced) {
+								pushGamepadMouseButton(down ? GameMessage::MSG_RAW_MOUSE_LEFT_BUTTON_DOWN
+								                            : GameMessage::MSG_RAW_MOUSE_LEFT_BUTTON_UP);
+							}
+						}
+						break;
+					case SDL_GAMEPAD_BUTTON_EAST:  // B / Circle: right click
+						if (down != s_gamepad.rightHeld) {
+							s_gamepad.rightHeld = down;
+							if (s_gamepad.cursorPlaced) {
+								pushGamepadMouseButton(down ? GameMessage::MSG_RAW_MOUSE_RIGHT_BUTTON_DOWN
+								                            : GameMessage::MSG_RAW_MOUSE_RIGHT_BUTTON_UP);
+							}
+						}
+						break;
+					case SDL_GAMEPAD_BUTTON_START: pushGamepadKey(window, SDL_SCANCODE_ESCAPE, down); break;
+					case SDL_GAMEPAD_BUTTON_BACK: pushGamepadKey(window, SDL_SCANCODE_SPACE, down); break;
+					case SDL_GAMEPAD_BUTTON_WEST: pushGamepadKey(window, SDL_SCANCODE_X, down); break;
+					case SDL_GAMEPAD_BUTTON_NORTH: pushGamepadKey(window, SDL_SCANCODE_Y, down); break;
+					case SDL_GAMEPAD_BUTTON_DPAD_UP: pushGamepadKey(window, SDL_SCANCODE_UP, down); break;
+					case SDL_GAMEPAD_BUTTON_DPAD_DOWN: pushGamepadKey(window, SDL_SCANCODE_DOWN, down); break;
+					case SDL_GAMEPAD_BUTTON_DPAD_LEFT: pushGamepadKey(window, SDL_SCANCODE_LEFT, down); break;
+					case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: pushGamepadKey(window, SDL_SCANCODE_RIGHT, down); break;
+					case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: s_gamepad.zoomInHeld = down; break;
+					case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: s_gamepad.zoomOutHeld = down; break;
+					default: break;
+				}
+				break;
+			}
+
+			case SDL_EVENT_GAMEPAD_REMOVED:
+				releaseAllGamepadHolds();
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	// Per-frame gamepad application -- the same once-per-frame discipline as
+	// applyPendingCameraMotion(): SDL queues several axis events per rendered
+	// frame, and applyCameraPan() must see at most one from/to pair per frame
+	// (screenToTerrain's camera-transform staleness, see its header comment).
+	void applyPendingGamepadMotion(SDL_Window *window)
+	{
+		if (!s_gamepad.active || !window) {
+			return;
+		}
+
+		const Uint64 now = SDL_GetTicks();
+		if (s_gamepad.lastApplyTicks == 0) {
+			s_gamepad.lastApplyTicks = now;
+			return;
+		}
+		float dt = (now - s_gamepad.lastApplyTicks) / 1000.0f;
+		s_gamepad.lastApplyTicks = now;
+		if (dt <= 0.0f) {
+			return;
+		}
+		if (dt > 0.1f) {
+			// Clamp after pauses/backgrounding so nothing teleports on resume.
+			dt = 0.1f;
+		}
+
+		int winW = 0, winH = 0;
+		SDL_GetWindowSize(window, &winW, &winH);
+		if (winW <= 0 || winH <= 0) {
+			return;
+		}
+
+		// Right stick -> virtual cursor, delivered as ordinary mouse-position
+		// messages (hover hilites widgets; with A held it grows the selection box).
+		if (s_gamepad.stickX != 0.0f || s_gamepad.stickY != 0.0f) {
+			placeGamepadCursorIfNeeded(window);
+			if (s_gamepad.cursorPlaced) {
+				const float newX = gamepadClamp(
+					s_gamepad.cursorX + s_gamepad.stickX * GAMEPAD_CURSOR_SPEED_PX_PER_SEC * dt,
+					1.0f, (float)(winW - 1));
+				const float newY = gamepadClamp(
+					s_gamepad.cursorY + s_gamepad.stickY * GAMEPAD_CURSOR_SPEED_PX_PER_SEC * dt,
+					1.0f, (float)(winH - 1));
+				if (newX != s_gamepad.cursorX || newY != s_gamepad.cursorY) {
+					s_gamepad.cursorX = newX;
+					s_gamepad.cursorY = newY;
+					pushMousePosition(newX, newY);
+				}
+			}
+		}
+
+		// Left stick -> camera pan through the calibrated ground-projection
+		// path. The anchor is the window center every frame; the stick only
+		// supplies the per-frame delta. Axes are INVERTED relative to the
+		// touch drag path: a stick push is "move the camera that way"
+		// (edge-scroll feel), while a finger drag is "drag the map under me".
+		if (s_gamepad.panX != 0.0f || s_gamepad.panY != 0.0f) {
+			const float centerX = winW * 0.5f;
+			const float centerY = winH * 0.5f;
+			applyCameraPan(centerX, centerY,
+			               centerX - s_gamepad.panX * GAMEPAD_PAN_SPEED_PX_PER_SEC * dt,
+			               centerY - s_gamepad.panY * GAMEPAD_PAN_SPEED_PX_PER_SEC * dt);
+		}
+
+		// Shoulders -> zoom (hold).
+		if (s_gamepad.zoomInHeld) {
+			applyCameraZoom(GAMEPAD_ZOOM_PX_PER_SEC * dt);
+		} else if (s_gamepad.zoomOutHeld) {
+			applyCameraZoom(-GAMEPAD_ZOOM_PX_PER_SEC * dt);
+		}
+	}
+
 } // anonymous namespace
 #endif // SAGE_MOBILE_PLATFORM
 
@@ -1561,6 +1827,20 @@ void SDL3GameEngine::pollSDL3Events(void)
 				break;
 #endif
 
+#if defined(SAGE_MOBILE_PLATFORM)
+			case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+			case SDL_EVENT_GAMEPAD_BUTTON_UP:
+			case SDL_EVENT_GAMEPAD_ADDED:
+			case SDL_EVENT_GAMEPAD_REMOVED:
+				// Gamepad -> cursor/camera/key translation (see the gamepad
+				// section above); quiet no-op unless a controller is connected.
+				if (m_SDLWindow) {
+					handleGamepadEvent(m_SDLWindow, event);
+				}
+				break;
+#endif
+
 			case SDL_EVENT_WINDOW_RESIZED:
 				handleWindowEvent(event.window);
 				break;
@@ -1578,6 +1858,8 @@ void SDL3GameEngine::pollSDL3Events(void)
 	// been drained -- see applyPendingCameraMotion()'s comment for why this
 	// can't happen per-event.
 	applyPendingCameraMotion();
+	// Same once-per-frame discipline for held sticks/shoulders (gamepad).
+	applyPendingGamepadMotion(m_SDLWindow);
 #endif
 }
 
