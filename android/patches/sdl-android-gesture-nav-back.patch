@@ -66,7 +66,7 @@
                              SDLActivity.mFullscreenModeActive = false;
                          }
                          if (Build.VERSION.SDK_INT >= 30 /* Android 11 (R) */) {
-@@ -1758,29 +1781,32 @@
+@@ -1758,29 +1781,31 @@
          dialog.show();
      }
  
@@ -83,27 +83,26 @@
 -            SDLActivity.this.getWindow().getDecorView().setSystemUiVisibility(flags);
 -        }
 -    };
-+    // GeneralsX @bugfix Android port 04/08/2026 Used to re-apply the legacy
-+    // SYSTEM_UI_FLAG_* set (without the modern behavior fix -- this call
-+    // site was never covered by the earlier BEHAVIOR_DEFAULT patch, only
-+    // COMMAND_CHANGE_WINDOW_STYLE above was) on a 2-SECOND DELAY via
-+    // Handler.postDelayed. Any bar-visibility change -- including a real
-+    // edge back-gesture attempt -- retriggered this, so for up to 2s after
-+    // every peek the window sat in the legacy state that disables
-+    // EdgeBackGestureHandler entirely, and once the delayed callback fired
-+    // it reasserted that exact broken state again. Reported by a tester as
-+    // the back gesture registering briefly, then "snapping back"/dying
-+    // within a couple of swipes. Re-hiding immediately (no delay) through
-+    // the same modern WindowCompat/WindowInsetsControllerCompat pair used
-+    // in COMMAND_CHANGE_WINDOW_STYLE removes both the delay window and the
-+    // legacy-flag regression at once.
-+    private void hideSystemUiModern() {
++    // GeneralsX @bugfix Android port 28/08/2026 Used to re-hide the system
++    // bars immediately whenever their visibility changed. That defeated
++    // BEHAVIOR_DEFAULT: the navigation bar disappeared again before the
++    // player could complete the Home/recents gesture, making the game feel
++    // impossible to minimize. Android's immersive-mode contract explicitly
++    // allows hidden bars to be revealed with a system gesture. Keep the
++    // modern controller and its gesture-safe behavior, but do not call
++    // hide() from the visibility callback. The initial fullscreen request
++    // in COMMAND_CHANGE_WINDOW_STYLE still hides both bars when the game
++    // enters fullscreen; Android then owns their user-requested visibility.
++    // This also avoids the old delayed legacy-flag regression without
++    // fighting a deliberate system-navigation gesture. Fullscreen will be
++    // requested again through SDL when the activity regains the game window.
++    private void preserveSystemNavigationGestures() {
 +        Window window = SDLActivity.this.getWindow();
 +        WindowCompat.setDecorFitsSystemWindows(window, false);
 +        WindowInsetsControllerCompat controller =
 +            WindowCompat.getInsetsController(window, window.getDecorView());
 +        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);
-+        controller.hide(WindowInsetsCompat.Type.systemBars());
++        // Do not hide here: the user may be revealing navigation to leave the game.
 +    }
  
      public void onSystemUiVisibilityChange(int visibility) {
@@ -115,7 +114,7 @@
 -                handler.postDelayed(rehideSystemUi, 2000);
 -            }
 -
-+            hideSystemUiModern();
++            preserveSystemNavigationGestures();
          }
      }
  
