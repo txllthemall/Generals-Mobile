@@ -38,6 +38,7 @@
     <string name="touch_select_button_first">Select a button first</string>
     <string name="touch_too_many_buttons">Maximum 20 buttons</string>
     <string name="touch_saved">Touch controls saved. They apply on the next game launch.</string>
+    <string name="touch_editor_panel_hint">Game command panel (orientation guide)</string>
 
     <!-- SetupActivity: status text -->
     <string name="setup_status_folder_not_set">Game folder: not set.\n</string>

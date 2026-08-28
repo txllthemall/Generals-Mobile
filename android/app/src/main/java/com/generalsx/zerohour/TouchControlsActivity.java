@@ -67,25 +67,39 @@ public class TouchControlsActivity extends Activity {
         setContentView(root);
         InsetUtil.applySafeInsets(root);
 
-        LinearLayout toolbar = new LinearLayout(this);
-        toolbar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        // GeneralsX @bugfix Android port 28/08/2026 Two toolbar rows: the
+        // single-row layout crammed the enable switch, the selection label,
+        // AND five action buttons into one line, so on narrow landscape
+        // phones the label shrank to nothing and buttons got clipped. The
+        // status row (switch + what-is-selected) stays fixed; the action
+        // row scrolls horizontally when it does not fit.
+        LinearLayout statusRow = new LinearLayout(this);
+        statusRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         enabledSwitch = new SwitchCompat(this);
         enabledSwitch.setText(R.string.touch_overlay_enabled);
         enabledSwitch.setChecked(config.enabled);
-        toolbar.addView(enabledSwitch);
+        statusRow.addView(enabledSwitch);
 
         selectedText = new TextView(this);
         selectedText.setTextColor(Color.WHITE);
         selectedText.setPadding(dp(12), 0, dp(8), 0);
-        toolbar.addView(selectedText, new LinearLayout.LayoutParams(0,
+        statusRow.addView(selectedText, new LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        root.addView(statusRow);
 
-        addToolbarButton(toolbar, R.string.touch_add_button, this::addNewButton);
-        addToolbarButton(toolbar, R.string.touch_edit_button, this::editSelectedButton);
-        addToolbarButton(toolbar, R.string.touch_delete_button, this::deleteSelectedButton);
-        addToolbarButton(toolbar, R.string.touch_reset_button, this::resetDefaults);
-        addToolbarButton(toolbar, R.string.touch_save_button, this::saveAndFinish);
-        root.addView(toolbar);
+        LinearLayout actionsRow = new LinearLayout(this);
+        actionsRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        addToolbarButton(actionsRow, R.string.touch_add_button, this::addNewButton);
+        addToolbarButton(actionsRow, R.string.touch_edit_button, this::editSelectedButton);
+        addToolbarButton(actionsRow, R.string.touch_delete_button, this::deleteSelectedButton);
+        addToolbarButton(actionsRow, R.string.touch_reset_button, this::resetDefaults);
+        addToolbarButton(actionsRow, R.string.touch_save_button, this::saveAndFinish);
+        android.widget.HorizontalScrollView actionsScroll = new android.widget.HorizontalScrollView(this);
+        actionsScroll.setHorizontalScrollBarEnabled(false);
+        actionsScroll.addView(actionsRow, new android.widget.HorizontalScrollView.LayoutParams(
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(actionsScroll);
 
         editor = new EditorCanvas();
         root.addView(editor, new LinearLayout.LayoutParams(
@@ -159,6 +173,12 @@ public class TouchControlsActivity extends Activity {
             Toast.makeText(this, R.string.touch_too_many_buttons, Toast.LENGTH_SHORT).show();
             return;
         }
+        // GeneralsX @bugfix Android port 28/08/2026 Spawn at the canvas
+        // center: the old (0, 0.5) anchor drew a fresh button HALF OFF the
+        // left edge (x is a fraction of the width, so 0 centered the rect on
+        // the border), and it stayed there until the user happened to drag
+        // it back. The editor's drag clamp (x >= 0.025) only applies to
+        // drags, never to this initial placement.
         config.buttons.add(new TouchControlConfig.ButtonSpec("E", android.view.KeyEvent.KEYCODE_E,
             0, 0.5f, 0.5f));
         selectedIndex = config.buttons.size() - 1;
@@ -217,9 +237,18 @@ public class TouchControlsActivity extends Activity {
         modifiers.addView(alt);
         form.addView(modifiers);
 
+        // GeneralsX @bugfix Android port 28/08/2026 Wrap the form in a
+        // ScrollView: in landscape the AlertDialog's height budget is the
+        // SHORT screen dimension, and the label field + key spinner + three
+        // modifier checkboxes simply did not fit -- the Apply/Cancel row
+        // (and half the checkboxes) rendered off-screen with no way to
+        // scroll, which read as "the editor is broken".
+        android.widget.ScrollView formScroll = new android.widget.ScrollView(this);
+        formScroll.addView(form);
+
         new AlertDialog.Builder(this)
             .setTitle(R.string.touch_edit_dialog_title)
-            .setView(form)
+            .setView(formScroll)
             .setNegativeButton(R.string.common_cancel, null)
             .setPositiveButton(R.string.touch_apply_button, (dialog, which) -> {
                 String newLabel = label.getText().toString().trim();
@@ -302,6 +331,14 @@ public class TouchControlsActivity extends Activity {
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(Color.rgb(9, 13, 18));
             canvas.drawRect(0, getHeight() * 0.82f, getWidth(), getHeight(), paint);
+            // GeneralsX @bugfix Android port 28/08/2026 Caption the shaded
+            // strip: unexplained, it read as a rendering artifact ("the
+            // editor draws a weird black bar"). It is actually a guide
+            // showing where the game's own bottom command panel sits.
+            text.setColor(Color.argb(170, 255, 255, 255));
+            text.setTextSize(dp(12));
+            canvas.drawText(getString(R.string.touch_editor_panel_hint),
+                getWidth() * 0.5f, getHeight() * 0.82f + dp(17), text);
 
             rects.clear();
             float size = dp(52) * config.buttonScale;

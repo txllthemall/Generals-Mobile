@@ -38,6 +38,7 @@
     <string name="touch_select_button_first">Сначала выберите кнопку</string>
     <string name="touch_too_many_buttons">Максимум 20 кнопок</string>
     <string name="touch_saved">Управление сохранено. Применится при следующем запуске игры.</string>
+    <string name="touch_editor_panel_hint">Игровая командная панель (для ориентира)</string>
 
     <!-- SetupActivity: status text -->
     <string name="setup_status_folder_not_set">Папка с игрой: не задана.\n</string>
