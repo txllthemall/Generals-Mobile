@@ -57,7 +57,7 @@
     {
       "name": "android-vulkan",
       "configurePreset": "android-vulkan",
-      "displayName": "Build Generals Mobile for Android"
+      "displayName": "Build Generals Mobile Android APK"
     }
   ]
 }
