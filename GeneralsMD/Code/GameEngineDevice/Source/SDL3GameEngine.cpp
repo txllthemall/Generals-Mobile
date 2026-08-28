@@ -1210,7 +1210,9 @@ void applyPendingCameraMotion()
 	//   L1 / R1                  -> zoom out / in (hold)
 	// ---------------------------------------------------------------------------
 	struct GamepadState {
-		bool active = false;        // any gamepad event seen since launch
+		bool active = false;        // a gamepad was successfully opened
+		SDL_Gamepad *handle = nullptr;
+		SDL_JoystickID instanceId = 0;
 		bool cursorPlaced = false;  // virtual cursor has a real position
 		float cursorX = 0.0f, cursorY = 0.0f;
 		float stickX = 0.0f, stickY = 0.0f;   // right stick -> cursor
@@ -1318,12 +1320,56 @@ void applyPendingCameraMotion()
 		s_gamepad.zoomInHeld = s_gamepad.zoomOutHeld = false;
 	}
 
+	// GeneralsX @bugfix Codex 28/08/2026 Initializing SDL_INIT_GAMEPAD only
+	// discovers devices and queues SDL_EVENT_GAMEPAD_ADDED; SDL does not open
+	// them automatically. Axis/button events are delivered only after a
+	// successful SDL_OpenGamepad(), so the first implementation looked complete
+	// but could never receive real controller input.
+	void openGamepad(SDL_JoystickID instanceId)
+	{
+		if (s_gamepad.active) {
+			return; // One virtual cursor/camera owner at a time.
+		}
+		SDL_Gamepad *gamepad = SDL_OpenGamepad(instanceId);
+		if (!gamepad) {
+			GX_TRACE("Gamepad: failed to open id %u: %s\n", (unsigned int)instanceId, SDL_GetError());
+			return;
+		}
+		s_gamepad.handle = gamepad;
+		s_gamepad.instanceId = instanceId;
+		s_gamepad.active = true;
+		s_gamepad.lastApplyTicks = 0;
+		GX_TRACE("Gamepad: opened id %u (%s)\n", (unsigned int)instanceId,
+		         SDL_GetGamepadName(gamepad) ? SDL_GetGamepadName(gamepad) : "unknown");
+	}
+
+	void closeGamepad(SDL_JoystickID instanceId)
+	{
+		if (!s_gamepad.active || instanceId != s_gamepad.instanceId) {
+			return;
+		}
+		releaseAllGamepadHolds();
+		if (s_gamepad.handle) {
+			SDL_CloseGamepad(s_gamepad.handle);
+		}
+		s_gamepad.handle = nullptr;
+		s_gamepad.instanceId = 0;
+		s_gamepad.active = false;
+		s_gamepad.lastApplyTicks = 0;
+		GX_TRACE("Gamepad: closed id %u\n", (unsigned int)instanceId);
+	}
+
 	void handleGamepadEvent(SDL_Window *window, const SDL_Event &event)
 	{
-		s_gamepad.active = true;
-
 		switch (event.type) {
+			case SDL_EVENT_GAMEPAD_ADDED:
+				openGamepad(event.gdevice.which);
+				break;
+
 			case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+				if (!s_gamepad.active || event.gaxis.which != s_gamepad.instanceId) {
+					break;
+				}
 				const float value = gamepadStickValue(event.gaxis.value);
 				switch (event.gaxis.axis) {
 					case SDL_GAMEPAD_AXIS_RIGHTX: s_gamepad.stickX = value; break;
@@ -1337,6 +1383,9 @@ void applyPendingCameraMotion()
 
 			case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
 			case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+				if (!s_gamepad.active || event.gbutton.which != s_gamepad.instanceId) {
+					break;
+				}
 				const bool down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
 				placeGamepadCursorIfNeeded(window);
 				switch (event.gbutton.button) {
@@ -1374,7 +1423,7 @@ void applyPendingCameraMotion()
 			}
 
 			case SDL_EVENT_GAMEPAD_REMOVED:
-				releaseAllGamepadHolds();
+				closeGamepad(event.gdevice.which);
 				break;
 
 			default:
