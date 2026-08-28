@@ -20,6 +20,28 @@
     <string name="setup_card_touch_controls">Мобильное управление</string>
     <string name="setup_button_touch_controls">Настроить сенсорное управление</string>
     <string name="setup_touch_controls_help">Создайте собственную панель хоткеев: добавляйте и удаляйте кнопки, назначайте клавиши и модификаторы Ctrl/Shift/Alt, перетаскивайте каждую кнопку в нужное место, регулируйте скорость прокрутки карты, размер и прозрачность. Двойной тап отправляет клавишу дважды, поэтому хоткеи Leikeze с действием по повторному нажатию продолжат работать.</string>
+    <string name="setup_button_gamepad_controls">Настроить геймпад</string>
+    <string name="setup_gamepad_controls_help">Настройте оба стика, мёртвую зону и видимый родной курсор игры, затем назначьте самые полезные хоткеи Generals на кнопки и крестовину.</string>
+
+    <!-- GamepadControlsActivity -->
+    <string name="gamepad_editor_title">Управление геймпадом</string>
+    <string name="gamepad_editor_help">Правый стик двигает родной контекстный курсор Generals. A/Cross выбирает и при удержании выделяет рамкой; B/Circle отдаёт или отменяет команду; левый стик двигает камеру; бамперы меняют масштаб; Start открывает меню. Хоткеи ниже можно переназначить под любой мод.</string>
+    <string name="gamepad_show_cursor">Показывать родной курсор игры</string>
+    <string name="gamepad_cursor_speed">Скорость курсора: %1$d%%</string>
+    <string name="gamepad_pan_speed">Скорость камеры: %1$d%%</string>
+    <string name="gamepad_deadzone">Мёртвая зона стиков: %1$d%%</string>
+    <string name="gamepad_fixed_mapping_help">Постоянно: A/Cross — выбор/левая кнопка, B/Circle — команда/правая кнопка, Start — меню, бамперы — масштаб. Рекомендуемые настройки под хоткеи Leikeze: E выбирает одинаковых юнитов (двойное нажатие — на всей карте), Q — боевые юниты, Space — последнее событие, крестовина — группы 1–4.</string>
+    <string name="gamepad_defaults_button">Рекомендуемые</string>
+    <string name="gamepad_save_button">Сохранить</string>
+    <string name="gamepad_choose_key">Выберите хоткей</string>
+    <string name="gamepad_map_west">X / Square</string>
+    <string name="gamepad_map_north">Y / Triangle</string>
+    <string name="gamepad_map_back">Back / Share</string>
+    <string name="gamepad_map_dpad_up">Крестовина вверх</string>
+    <string name="gamepad_map_dpad_right">Крестовина вправо</string>
+    <string name="gamepad_map_dpad_down">Крестовина вниз</string>
+    <string name="gamepad_map_dpad_left">Крестовина влево</string>
+    <string name="gamepad_saved">Настройки геймпада сохранены и применятся при следующем запуске игры.</string>
     <string name="touch_editor_title">Редактор сенсорного управления</string>
     <string name="touch_overlay_enabled">Показывать панель хоткеев</string>
     <string name="touch_add_button">Добавить</string>

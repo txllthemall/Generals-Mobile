@@ -63,23 +63,21 @@ public class GeneralsZHActivity extends SDLActivity {
         };
     }
 
+    // GeneralsX @feature Codex 28/08/2026 Keep both landscape rotations available.
     // TheSuperHackers @bugfix Android port 08/07/2026 THE reason the game kept
     // rotating despite the manifest's screenOrientation="landscape" AND the
     // setRequestedOrientation() call in onCreate(): SDL3's native window
-    // creation calls SDLActivity.setOrientation() over JNI, which lands here
-    // (setOrientationBis) and — for a non-resizable landscape window with no
-    // SDL_HINT_ORIENTATIONS hint — applies SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
-    // silently overriding both earlier locks and re-enabling accelerometer
-    // rotation (including the 180° landscape flip the user kept seeing).
-    // SDL documents this method as "This can be overridden": pin it to the
-    // absolute landscape orientation unconditionally.
+    // creation calls SDLActivity.setOrientation() over JNI. Keep the game in
+    // landscape, but allow both landscape rotations so the USB-C/controller
+    // cable can sit on either end of the phone.
     @Override
     public void setOrientationBis(int w, int h, boolean resizable, String hint) {
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // GeneralsX @feature Codex 28/08/2026 Keep both landscape rotations available.
         // TheSuperHackers @bugfix Android port 07/07/2026 Belt-and-suspenders
         // on top of the manifest's screenOrientation="landscape": a real
         // device log still showed Resolve_Present_BackBuffer_Size catching a
@@ -87,7 +85,7 @@ public class GeneralsZHActivity extends SDLActivity {
         // manifest lock alone isn't settling fast enough on every device/OEM
         // skin. Setting it again here in code takes effect before this
         // Activity's window is even measured, closing the gap further.
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
         extractBundledRuntime();
 
@@ -134,6 +132,7 @@ public class GeneralsZHActivity extends SDLActivity {
         // the legacy fixed 0-9 GroupPanel when the configurable overlay is on.
         File launchFolder = haveCustomPath ? new File(gamePath) : legacyGameDataDir();
         TouchControlConfig.prepareForLaunch(this, launchFolder);
+        GamepadControlConfig.prepareForLaunch(this, launchFolder);
 
         super.onCreate(savedInstanceState);
 
@@ -200,7 +199,7 @@ public class GeneralsZHActivity extends SDLActivity {
     // and centered vertically on each edge, meant to protect an in-app
     // camera-pan-recovery swipe from being stolen by the OS back gesture.
     // The math assumed a tall portrait surface; this app is
-    // android:screenOrientation="landscape" (AndroidManifest.xml), so
+    // a landscape-only orientation (AndroidManifest.xml), so
     // mSurface.getHeight() is the SHORT dimension -- on a typical 20:9
     // landscape phone that's ~360dp, giving only ~80dp of open margin on
     // each side (out of a "200dp centered" band that assumed hundreds of

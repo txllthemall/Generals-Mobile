@@ -126,6 +126,7 @@ public class SetupActivity extends Activity {
 
         addButton(root, getString(R.string.setup_button_select_game_folder), this::onSelectGameFolder);
         addButton(root, getString(R.string.setup_button_touch_controls), this::onTouchControls);
+        addButton(root, getString(R.string.setup_button_gamepad_controls), this::onGamepadControls);
         addButton(root, getString(R.string.setup_button_view_logs), this::onViewLogs);
         addButton(root, getString(R.string.setup_button_launch_game), this::onLaunchGame);
         addButton(root, getString(R.string.setup_button_clear_game_folder), this::onClearGameFolder);
@@ -210,7 +211,7 @@ public class SetupActivity extends Activity {
         helpCard.addView(help);
     }
 
-    // Android-first control center: the editor owns both the visible hotkey
+    // GeneralsX @feature Codex 28/08/2026 Android-first control center: the editor owns both the visible hotkey
     // overlay and native camera-pan sensitivity. It intentionally lives near
     // the primary launch/account actions rather than under renderer diagnostics.
     private void buildTouchControlsSection(LinearLayout root) {
@@ -220,10 +221,20 @@ public class SetupActivity extends Activity {
         help.setPadding(0, 0, 0, dp(8));
         content.addView(help);
         addButton(content, getString(R.string.setup_button_touch_controls), this::onTouchControls);
+
+        TextView gamepadHelp = new TextView(this);
+        gamepadHelp.setText(R.string.setup_gamepad_controls_help);
+        gamepadHelp.setPadding(0, dp(12), 0, dp(8));
+        content.addView(gamepadHelp);
+        addButton(content, getString(R.string.setup_button_gamepad_controls), this::onGamepadControls);
     }
 
     private void onTouchControls() {
         startActivity(new Intent(this, TouchControlsActivity.class));
+    }
+
+    private void onGamepadControls() {
+        startActivity(new Intent(this, GamepadControlsActivity.class));
     }
 
     // GeneralsX @feature Android port 13/07/2026 GitHub issue #4: in-app
@@ -1425,7 +1436,7 @@ public class SetupActivity extends Activity {
             return;
         }
         pendingLaunchAfterRotation = true;
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
     @Override

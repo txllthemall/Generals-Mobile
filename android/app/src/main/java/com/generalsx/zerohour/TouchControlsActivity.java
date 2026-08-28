@@ -53,7 +53,8 @@ public class TouchControlsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        // GeneralsX @feature Codex 28/08/2026 Allow either landscape rotation for cabled controllers.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         setTitle(R.string.touch_editor_title);
         config = TouchControlConfig.load(this);
         buildUi();
