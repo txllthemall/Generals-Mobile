@@ -6,8 +6,8 @@
 
 **A mobile-first community port focused on making Zero Hour practical to play on modern Android devices.**
 
-[![Android Build](https://github.com/txllthemall/GeneralsZH-Android-Adreno840-Allocation-Fix/actions/workflows/build-android.yml/badge.svg)](https://github.com/txllthemall/GeneralsZH-Android-Adreno840-Allocation-Fix/actions/workflows/build-android.yml)
-[![Release](https://img.shields.io/badge/release-v122-3DDC84?logo=android&logoColor=white)](https://github.com/txllthemall/GeneralsZH-Android-Adreno840-Allocation-Fix/releases)
+[![Android Build](https://github.com/txllthemall/Generals-Mobile/actions/workflows/build-android.yml/badge.svg)](https://github.com/txllthemall/Generals-Mobile/actions/workflows/build-android.yml)
+[![Release](https://img.shields.io/badge/release-v122-3DDC84?logo=android&logoColor=white)](https://github.com/txllthemall/Generals-Mobile/releases)
 [![Android](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white)](#requirements)
 [![ARM64](https://img.shields.io/badge/architecture-ARM64-0091BD?logo=arm&logoColor=white)](#requirements)
 [![Vulkan](https://img.shields.io/badge/renderer-Vulkan%20%2F%20DXVK-AC162C?logo=vulkan&logoColor=white)](#features)
@@ -45,7 +45,7 @@ The goal is simple: **make Zero Hour feel like an actual Android game instead of
 
 The current Android generation is **version code 122**. It supersedes the old v118 stability build and represents the current mobile-focused codebase.
 
-[**Open Releases**](https://github.com/txllthemall/GeneralsZH-Android-Adreno840-Allocation-Fix/releases)
+[**Open Releases**](https://github.com/txllthemall/Generals-Mobile/releases)
 
 ### Highlights since the original stability fork
 
