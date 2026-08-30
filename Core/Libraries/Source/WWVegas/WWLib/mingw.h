@@ -21,8 +21,7 @@
 #if defined(__MINGW32__) || defined(__MINGW64__)
 
 /*
-**	MinGW-w64 provides most mathematical constants in <math.h> when _USE_MATH_DEFINES is set
-**	(which is done globally in cmake/mingw.cmake).
+**	MinGW-w64 provides most mathematical constants in <math.h> when _USE_MATH_DEFINES is set.
 **
 **	However, MinGW's <math.h> is missing one constant (M_1_SQRTPI) and uses a different name
 **	for another (M_SQRT1_2 instead of M_SQRT_2). We define those here to match MSVC and Watcom.

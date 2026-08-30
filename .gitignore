@@ -4,7 +4,6 @@
 !.gitignore
 !.gitattributes
 !.github
-!.devin
 !.gitmodules
 
 *.user
@@ -34,7 +33,6 @@ CPackSourceConfig.cmake
 .cproject
 .project
 *~
-!*.exe
 *.lastbuildstate
 *.unsuccessfulbuild
 *.tlog
@@ -79,23 +77,13 @@ Generals/logs/
 # External reference repositories (large, don't commit)
 # references/
 
-# Release bundles
-GeneralsX-macos-*.zip
-GeneralsXZH-macos-*.zip
-GeneralsX-linux-*.tar.gz
-GeneralsXZH-linux-*.tar.gz
-
-# flatpak build files (exclude staging/build dirs but track scripts and manifests)
-.flatpak-builder/
-flatpak/staging/
-flatpak/*.flatpak
-
 #tmp and log files on root folder
 logs_*.zip
 *.log
-# iOS shell-app build products (XcodeGen regenerates the project from ios/project.yml)
-ios/build/
-ios/GeneralsXZH.xcodeproj/
+
+# APKs are release artifacts, never source files.
+*.apk
+/apk/
 
 # Android packaging staging dir (scripts/build/android/package-android-zh.sh):
 # fetched fonts + default Turnip driver, re-derivable, not source.

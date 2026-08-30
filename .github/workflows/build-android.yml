@@ -81,15 +81,12 @@ jobs:
       # its sdkmanager then installs the NDK/platform/build-tools above.
       CMDLINE_TOOLS_VERSION: "13114758"
       CMDLINE_TOOLS_SHA1: "5fdcc763663eefb86a5b8879697aa6088b041e70"
-      # GeneralsX @bugfix Android CI 07/07/2026 vcpkg pinned to a 2026 master
-      # commit, NOT the ffc071e0 pin the Linux workflow uses: vcpkg.json
-      # overrides ffmpeg to 8.1.1#2 (+ helper port ffmpeg-bin2c 8.1.1), and a
+      # vcpkg is pinned to a revision whose version database contains the
+      # ffmpeg 8.1.1#2 override (plus helper port ffmpeg-bin2c 8.1.1). A
       # checkout's version database must CONTAIN an overridden version to
       # resolve it. ffc071e0's DB tops out at ffmpeg 8.0.1 → run #2 died with
-      # "no version database entry for ffmpeg at 8.1.1#2". macOS CI never hit
-      # this because ffmpeg comes from Homebrew there; the override is only
-      # exercised on ios/android. Non-overridden ports still resolve via the
-      # manifest's builtin-baseline, so this bump does not move other deps.
+      # "no version database entry for ffmpeg at 8.1.1#2". Non-overridden ports
+      # still resolve via the manifest's builtin baseline.
       VCPKG_COMMIT: "42e4e33e1505c9f47b58c21e0f557c1571b751ee"
 
     steps:
@@ -243,7 +240,7 @@ jobs:
           # stale cache kept being "valid" and kept breaking every run.
           # Tying the key to the repo name means a future rename invalidates
           # this cache instead of silently corrupting it again.
-          key: dxvk-android-${{ runner.os }}-${{ github.repository }}-${{ env.DXVK_REF }}-${{ hashFiles('Patches/dxvk-android.patch', 'Patches/dxvk-ios.patch', 'cmake/dx8.cmake', 'cmake/meson-arm64-android-cross.ini.in') }}
+          key: dxvk-android-${{ runner.os }}-${{ github.repository }}-${{ env.DXVK_REF }}-${{ hashFiles('Patches/dxvk-android.patch', 'Patches/dxvk-sdl3-pixel-size.patch', 'cmake/dx8.cmake', 'cmake/meson-arm64-android-cross.ini.in') }}
 
       - name: Bootstrap vcpkg
         run: |
@@ -551,7 +548,7 @@ jobs:
           # stale cache kept being "valid" and kept breaking every run.
           # Tying the key to the repo name means a future rename invalidates
           # this cache instead of silently corrupting it again.
-          key: dxvk-android-${{ runner.os }}-${{ github.repository }}-${{ env.DXVK_REF }}-${{ hashFiles('Patches/dxvk-android.patch', 'Patches/dxvk-ios.patch', 'cmake/dx8.cmake', 'cmake/meson-arm64-android-cross.ini.in') }}
+          key: dxvk-android-${{ runner.os }}-${{ github.repository }}-${{ env.DXVK_REF }}-${{ hashFiles('Patches/dxvk-android.patch', 'Patches/dxvk-sdl3-pixel-size.patch', 'cmake/dx8.cmake', 'cmake/meson-arm64-android-cross.ini.in') }}
 
       # Always re-save under this run's unique key (the restore-keys prefix
       # match above means later runs pick up the freshest available cache);

@@ -35,7 +35,7 @@ JNILIBS="${ANDROID_DIR}/app/src/main/jniLibs/arm64-v8a"
 JAVA_SDL="${ANDROID_DIR}/app/src/main/java-sdl"
 ASSETS="${ANDROID_DIR}/app/src/main/assets/gamedata"
 DEFAULT_DRIVER_ASSETS="${ANDROID_DIR}/app/src/main/assets/default_driver"
-STAGING="${GX_ANDROID_STAGING:-${HOME}/GeneralsX/android-staging}"
+STAGING="${GX_ANDROID_STAGING:-${HOME}/Generals-Mobile/android-staging}"
 
 # --- 1. native libraries -----------------------------------------------------
 GAME_LIB="$(find "${BUILD_DIR}" -name libmain.so -not -path "*/_deps/*" 2>/dev/null | head -1)"
@@ -186,7 +186,7 @@ mkdir -p "${ASSETS}"
 # Fonts (Liberation, renamed to the Windows names the game requests).
 if [[ ! -f "${STAGING}/fonts/arial.ttf" ]]; then
     echo "==> Fonts not staged yet; fetching Liberation fonts"
-    GX_FONTS="${STAGING}/fonts" "${PROJECT_ROOT}/scripts/build/ios/stage-fonts.sh"
+    GX_FONTS="${STAGING}/fonts" "${PROJECT_ROOT}/scripts/build/android/stage-fonts.sh"
 fi
 rm -rf "${ASSETS}/fonts"
 cp -R "${STAGING}/fonts" "${ASSETS}/fonts"

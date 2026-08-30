@@ -1,66 +1,68 @@
-name: Bug Report
-description: Report bugs or issues you've encountered while playing the game
-labels: [ "Bug", "⚠️ Triage" ]
+name: Android bug report
+description: Report a Generals Mobile crash, compatibility problem or control issue
+labels: ["Bug", "Triage"]
 
 body:
-- type: checkboxes
-  attributes:
-    label: Prerequisites
-    description: Please make sure you've completed the following steps before submitting an issue
-    options:
-      - label: I have searched for similar issues and confirmed this is not a duplicate
-        required: true
+  - type: checkboxes
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I searched existing issues and did not find the same report
+          required: true
+        - label: I am using legally owned Zero Hour game data
+          required: true
 
-- type: checkboxes
-  attributes:
-    label: Game Version
-    description: Which version(s) of the game does this bug appear in?
-    options:
-      - label: "Command & Conquer Generals"
-        required: false
-      - label: "Command & Conquer Generals: Zero Hour"
-        required: false
-      - label: "Other (please specify below)"
-        required: false
+  - type: input
+    attributes:
+      label: Generals Mobile version
+      description: APK version code or release tag
+      placeholder: v123 / versionCode 123
+    validations:
+      required: true
 
-- type: checkboxes
-  attributes:
-    label: Operating System
-    description: Which operating system(s) does this bug appear on? (Select all that apply)
-    options:
-      - label: "macOS"
-        required: false
-      - label: "Linux"
-        required: false
-      - label: "Windows"
-        required: false
-      - label: "Other (please specify below)"
-        required: false
+  - type: input
+    attributes:
+      label: Phone and GPU
+      placeholder: OnePlus 15, Snapdragon, Adreno 840
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Bug Description
-    description: |
-      What is the bug? What happened versus what you expected to happen?
-      Please provide a clear and detailed description.
-  validations:
-    required: true
+  - type: input
+    attributes:
+      label: Android and driver
+      description: Android/ROM version and stock, Turnip or other Vulkan driver
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Reproduction Steps
-    description: How can we reproduce this bug?
-    placeholder: |
-      1. Start a new game with [specific settings]
-      2. Build/Select [specific unit/building]
-      3. Perform [specific action]
-      4. Observe [the bug]
-  validations:
-    required: true
+  - type: dropdown
+    attributes:
+      label: Input method
+      options:
+        - Touch
+        - Gamepad
+        - Touch and gamepad
+        - Not input-related
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Additional Context
-    description: Add any relevant screenshots, video recordings, or other files here
-  validations:
-    required: false
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start a skirmish...
+        2. Select...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Logs and media
+      description: Attach the relevant logcat excerpt, screenshots or video. Do not upload game data.

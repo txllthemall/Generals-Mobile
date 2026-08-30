@@ -66,8 +66,9 @@ compiled under a shared `SAGE_MOBILE_PLATFORM` guard
 | `CMakePresets.json` | `android-vulkan` preset: vcpkg + chainloaded NDK toolchain, arm64-v8a, API 28, `SAGE_DXVK_USE_LOCAL_FORK=ON` |
 | `cmake/triplets/arm64-android.cmake` | overlay triplet pinning API level for vcpkg-built deps |
 | `cmake/meson-arm64-android-cross.ini.in` | DXVK meson cross file (NDK clang, static libc++ into the DXVK libs) |
-| `cmake/dx8.cmake` | `elseif(ANDROID)` branch: builds DXVK d3d8/d3d9 from the local fork with meson; same sdl3.pc trick as macOS (silent-SDL2-WSI trap); artifact copy to build root |
-| `Patches/dxvk-android.patch` | unversioned `.so` names — APKs can't carry `libdxvk_d3d9.so.0.20600` + symlinks; verified to apply cleanly together with `dxvk-ios.patch` (whose WSI pixel-size fix Android also wants) |
+| `cmake/dx8.cmake` | builds DXVK d3d8/d3d9 from the local fork with meson and copies artifacts to the build root |
+| `Patches/dxvk-android.patch` | unversioned `.so` names — APKs cannot carry `libdxvk_d3d9.so.0.20600` plus symlinks |
+| `Patches/dxvk-sdl3-pixel-size.patch` | uses drawable pixels rather than logical window units on high-density Android screens |
 | `cmake/sdl3.cmake` | Android: no system libpng (stb decodes PNG), no TIF/WEBP backends |
 | `Core/.../WW3D2/CMakeLists.txt` | `SAGE_USE_FREETYPE` + Freetype link on Android; fontconfig excluded |
 | `Core/.../WW3D2/render2dsentence.{h,cpp}` | bundled-font locator now iOS **and** Android |
@@ -160,7 +161,7 @@ setting; it isn't something a workflow file can turn on for itself.
 
 ### Option B — Local build
 
-Host: Linux or macOS.
+Host: a Unix-compatible environment with the Android SDK/NDK, or use the GitHub workflow.
 
 ```sh
 # One-time
@@ -263,8 +264,7 @@ a file manager to create them by hand.
 
 ## 5. Verification checklist for first device bring-up
 
-In dependency order; each gate isolates a failure class (the iOS port's ladder,
-§8.2 of the playbook):
+In dependency order; each gate isolates a failure class:
 
 1. **vcpkg deps build for arm64-android** — watch ffmpeg and curl/openssl; both
    are supported by upstream vcpkg but versions move. `PKG_CONFIG_PATH` is
@@ -272,7 +272,8 @@ In dependency order; each gate isolates a failure class (the iOS port's ladder,
 2. **Game code compiles under NDK clang/bionic** — expect a small round of
    fixes: bionic lacks some glibc-isms the desktop Linux build may lean on
    (`glob.h` exists since API 28 — that's part of why minSdk is 28).
-3. **DXVK meson cross-build** — `dxvk-android.patch` + `dxvk-ios.patch` apply
+3. **DXVK meson cross-build** — `dxvk-android.patch` plus
+   `dxvk-sdl3-pixel-size.patch` apply
    automatically at configure. Verify after build (the build script does):
    `strings libdxvk_d3d9.so | grep Sdl3WsiDriver`, `llvm-readelf -h` says
    AArch64, and `llvm-readelf -d libdxvk_d3d8.so` shows `SONAME libdxvk_d3d8.so`
@@ -400,10 +401,7 @@ was completely invisible without root. Addressed with three new pieces
 - **Gradle wrapper is not committed** (binary jar). Use a system Gradle 8.x or
   open `android/` once in Android Studio to generate it.
 - **Multiplayer works on Android** via GeneralsOnline (see the status note at
-  the top of this doc) — this is no longer the "broken everywhere, GameSpy is
-  dead" story that's still true for the untouched macOS/iOS builds. Retail LAN
-  play (cross-platform float determinism against a Windows client) remains
-  unverified, as on every other port.
+  the top of this doc). Retail LAN interoperability remains unverified.
 - **Mali/Vulkan 1.1 devices** (e.g. Redmi Note 8 Pro / Mali-G76): can't run the
   DXVK 2.6 path — hardware limitation, not fixable in software. The app now
   shows a clear native dialog ("please make sure you have DirectX 8.1 or

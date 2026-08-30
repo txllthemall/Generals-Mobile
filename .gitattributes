@@ -1,0 +1,14 @@
+* text=auto
+
+# Linux-hosted Android build inputs must keep Unix line endings on every host.
+*.sh text eol=lf
+*.patch text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+
+*.png binary
+*.ico binary
+*.keystore binary
+*.so binary

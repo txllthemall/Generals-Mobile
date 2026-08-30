@@ -33,12 +33,8 @@ endif()
 # Top level project, doesn't really affect anything.
 project(genzh LANGUAGES C CXX)
 
-# GeneralsX @build BenderAI 10/02/2026
-# Linux port: Make CompatLib headers globally accessible so Core libraries (WWLib, WWMath, etc.)
-# can access platform compatibility types when building for non-Windows platforms
-if(UNIX)
-    include_directories(${CMAKE_SOURCE_DIR}/Generals/Code/CompatLib/Include)
-endif()
+# The Android build consumes the original engine's Win32-compatible API shim.
+include_directories(${CMAKE_SOURCE_DIR}/Generals/Code/CompatLib/Include)
 
 # Compiler cache (ccache) – must be included before compilers.cmake so the
 # launcher is registered before CMake finalizes the compiler selection.
@@ -47,31 +43,12 @@ include(cmake/ccache.cmake)
 # This file handles extra settings wanted/needed for different compilers.
 include(cmake/compilers.cmake)
 
-# Debug symbol stripping for Release builds (MinGW)
-include(cmake/debug_strip.cmake)
-
 include(FetchContent)
 
-# MinGW-w64 specific configuration
-if(MINGW)
-    include(cmake/mingw.cmake)
-    include(cmake/reactos-atl.cmake)
-    include(cmake/widl.cmake)
-endif()
-
-# Find/Add build dependencies and stubs shared by all projects
-if((WIN32 OR "${CMAKE_SYSTEM}" MATCHES "Windows") AND ${CMAKE_SIZEOF_VOID_P} EQUAL 4)
-    include(cmake/miles.cmake)
-    include(cmake/bink.cmake)
-endif()
-
-# Always include DX8 headers (needed for both Windows and Linux builds)
-# On Windows: min-dx8-sdk headers
-# On Linux: DXVK headers (for D3D8→Vulkan translation)
+# Build the Android DX8-to-Vulkan backend.
 include(cmake/dx8.cmake)
 
-# SDL3 windowing/input for Linux builds (Phase 1)
-# GeneralsX @build BenderAI 11/02/2026
+# SDL3 provides Android windowing and input.
 if(SAGE_USE_SDL3)
     include(cmake/sdl3.cmake)
 endif()
@@ -80,12 +57,9 @@ endif()
 # loading (Adreno/Turnip via libadrenotools) -- self-guarded with if(ANDROID).
 include(cmake/adrenotools.cmake)
 
-# Define a dummy stlport target when not on VC6.
-if (IS_VS6_BUILD)
-    include(cmake/stlport.cmake)
-else()
-    add_library(stlport INTERFACE)
-endif()
+# The modern Android toolchain uses libc++; keep the legacy target name only as
+# an interface dependency expected by shared engine CMake files.
+add_library(stlport INTERFACE)
 
 include(cmake/config.cmake)
 include(cmake/gamespy.cmake)
@@ -107,18 +81,7 @@ include(cmake/curl.cmake)
 # Self-guarded with if(SAGE_USE_DETERMINISTIC_MATH), so always safe to include.
 include(cmake/gamemath.cmake)
 
-if (IS_VS6_BUILD)
-    # The original max sdk does not compile against a modern compiler.
-    # If there is a desire to make this work, then a fixed max sdk needs to be created.
-    add_subdirectory(Dependencies/MaxSDK)
-endif()
 add_subdirectory(Dependencies/Utility)
-
-# To be removed when abandoning VC6
-if (IS_VS6_BUILD)
-    include_directories(Dependencies/Utility)
-    add_compile_options(/FIUtility/CppMacros.h)
-endif()
 
 add_subdirectory(resources)
 
@@ -132,26 +95,13 @@ if(UNIX AND NOT RTS_BUILD_ZEROHOUR)
     add_subdirectory(GeneralsMD/Code/CompatLib)
 endif()
 
-# SagePatch (casual QoL extras: screenshot, cursor lock, brightness, etc.)
-# Must be added before the game targets so sage_patch target exists when we
-# declare the dependency below.
-if(RTS_BUILD_OPTION_SAGE_PATCH)
-    add_subdirectory(Patches/SagePatch)
-endif()
-
 # Add main build targets
 if(RTS_BUILD_ZEROHOUR)
     add_subdirectory(GeneralsMD)
-    if(TARGET sage_patch)
-        add_dependencies(z_generals sage_patch)
-    endif()
 endif()
 
 if(RTS_BUILD_GENERALS)
     add_subdirectory(Generals)
-    if(TARGET sage_patch)
-        add_dependencies(g_generals sage_patch)
-    endif()
 endif()
 
 feature_summary(WHAT ENABLED_FEATURES DESCRIPTION "Enabled features:")

@@ -1,14 +1,23 @@
-# Test Replays
+# Android Validation
 
-The GeneralsReplays folder contains replays and the required maps that are tested in CI to ensure that the game is retail compatible.
+## Build validation
 
-You can also test with these replays locally:
-- Copy the replays into a subfolder in your `%USERPROFILE%/Documents/Command and Conquer Generals Zero Hour Data/Replays` folder.
-- Copy the maps into `%USERPROFILE%/Documents/Command and Conquer Generals Zero Hour Data/Maps`
-- Start the test with this: (copy into a .bat file next to your executable)
-```
-START /B /W generalszh.exe -jobs 4 -headless -replay subfolder/*.rep > replay_check.log
-echo %errorlevel%
-PAUSE
-```
-It will run the game in the background and check that each replay is compatible. You need to use a VC6 build with optimizations and RTS_BUILD_OPTION_DEBUG = OFF, otherwise the game won't be compatible.
+Run `.github/workflows/build-android.yml` with the `android-vulkan` preset. The job
+must finish native compilation, APK packaging and its ABI/ELF/package checks.
+
+## Device validation
+
+Install with `adb install -r <apk>` only when the APK version code is newer than the
+installed build. Verify at minimum:
+
+- launch through the animated main menu;
+- touch selection, camera scrolling and building placement;
+- Home/recents navigation and return to the game;
+- both landscape orientations;
+- gamepad cursor, clicks, hotkeys and configuration;
+- music, speech and repeated combat audio;
+- a representative skirmish and a longer stability session;
+- logcat contains no fatal Android exception, native signal, allocation-pool
+  corruption, Vulkan device loss or OpenAL exception flood.
+
+CI success is never a substitute for these device checks.

@@ -249,9 +249,6 @@ if(RTS_BUILD_OPTION_FFMPEG)
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswscale)
     endif()
-    # Directory-scoped imported target: re-apply the framework flag merge here too.
-    include(${CMAKE_SOURCE_DIR}/cmake/ffmpeg_framework_fix.cmake)
-    sage_fix_ffmpeg_framework_flags()
     target_link_libraries(g_gameenginedevice PUBLIC PkgConfig::FFMPEG)
 endif()
 

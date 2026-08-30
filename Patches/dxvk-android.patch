@@ -9,10 +9,8 @@
 # only, no symlinks), and a DT_NEEDED on `libdxvk_d3d9.so.0` would then never
 # resolve inside the app's linker namespace. Build unversioned .so on Android.
 #
-# Applied together with Patches/dxvk-ios.patch (its SDL3 WSI pixel-size fix is
-# platform-neutral and wanted on Android's high-density displays too; its
-# @executable_path Vulkan loader entries live in an __APPLE__ branch that does
-# not compile into the Android build).
+# Applied before Patches/dxvk-sdl3-pixel-size.patch, which corrects the
+# swapchain extent on Android high-density displays.
 #
 # Apply with: git -C references/fbraz3-dxvk apply ../../Patches/dxvk-android.patch
 # Then build with: meson setup --cross-file build/<preset>/meson-arm64-android-cross.ini ...
@@ -20,7 +18,7 @@ diff --git a/meson.build b/meson.build
 index 8f725104..3e6bd9d5 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -137,6 +137,13 @@ else
+@@ -137,3 +137,10 @@ else
      dxvk_version += [ padded ]
    endforeach
 -  dxvk_so_version = {'version': dxvk_abi_version + '.' + dxvk_version[0] + dxvk_version[1] + dxvk_version[2]}
@@ -32,9 +30,6 @@ index 8f725104..3e6bd9d5 100644
 +  else
 +    dxvk_so_version = {'version': dxvk_abi_version + '.' + dxvk_version[0] + dxvk_version[1] + dxvk_version[2]}
 +  endif
-
-   wrc           = find_program('touch')
-   wrc_generator = generator(wrc, output : [ '@BASENAME@_ignored.h' ], arguments : [ '@OUTPUT@' ] )
 diff --git a/src/wsi/sdl3/wsi_platform_sdl3.cpp b/src/wsi/sdl3/wsi_platform_sdl3.cpp
 index 9975cda..f29ca37 100644
 --- a/src/wsi/sdl3/wsi_platform_sdl3.cpp

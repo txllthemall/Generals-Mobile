@@ -46,7 +46,7 @@
 # ("requested feature not reported by driver: <struct>[<index>]") and cleared.
 #
 # Apply with: git -C references/fbraz3-dxvk apply ../../Patches/dxvk-vulkan11-adaptive.patch
-# Applied after dxvk-android.patch and dxvk-ios.patch.
+# Applied after dxvk-android.patch and dxvk-sdl3-pixel-size.patch.
 diff --git a/meson.build b/meson.build
 index 91e9871..578a246 100644
 --- a/meson.build

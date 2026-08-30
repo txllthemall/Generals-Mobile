@@ -10,9 +10,9 @@ option(RTS_BUILD_OPTION_ASAN "Build code with Address Sanitizer." OFF)
 option(RTS_BUILD_OPTION_VC6_FULL_DEBUG "Build VC6 with full debug info." OFF)
 option(RTS_BUILD_OPTION_FFMPEG "Enable FFmpeg support" OFF)
 
-# Linux/SDL3 and OpenAL options (Phase 1 Linux port)
-option(SAGE_USE_SDL3 "Use SDL3 for windowing/input (Linux/macOS)" OFF)
-option(SAGE_USE_OPENAL "Use OpenAL for audio backend (Linux/macOS)" OFF)
+# Android platform backends.
+option(SAGE_USE_SDL3 "Use SDL3 for Android windowing/input" ON)
+option(SAGE_USE_OPENAL "Use OpenAL for Android audio" ON)
 
 # GeneralsX @feature BenderAI 21/04/2026 In-game update checker via GitHub Releases API (SDL3+libcurl builds only)
 # Default ON when SDL3 is enabled, but only if the user has not explicitly set SAGE_UPDATE_CHECK.
@@ -20,14 +20,6 @@ option(SAGE_USE_OPENAL "Use OpenAL for audio backend (Linux/macOS)" OFF)
 if(NOT DEFINED CACHE{SAGE_UPDATE_CHECK})
     set(SAGE_UPDATE_CHECK "${SAGE_USE_SDL3}" CACHE BOOL "Enable in-game update check via GitHub Releases API")
 endif()
-
-# macOS port option (Phase 5)
-option(SAGE_USE_MOLTENVK "Use MoltenVK for Vulkan on macOS (Phase 5 macOS port)" OFF)
-
-# SagePatch — optional QoL features for casual play (screenshot, cursor lock,
-# brightness, camera/scroll INI overrides). Compiles to a separate shared lib
-# that is loaded via DYLD_INSERT_LIBRARIES (macOS) / LD_PRELOAD (Linux) at runtime.
-option(RTS_BUILD_OPTION_SAGE_PATCH "Build SagePatch QoL extras (macOS/Linux, requires SDL3)" ON)
 
 if(NOT RTS_BUILD_ZEROHOUR AND NOT RTS_BUILD_GENERALS)
     set(RTS_BUILD_ZEROHOUR TRUE)
@@ -43,10 +35,9 @@ add_feature_info(DebugBuild RTS_BUILD_OPTION_DEBUG "Building as a \"Debug\" buil
 add_feature_info(AddressSanitizer RTS_BUILD_OPTION_ASAN "Building with address sanitizer")
 add_feature_info(Vc6FullDebug RTS_BUILD_OPTION_VC6_FULL_DEBUG "Building VC6 with full debug info")
 add_feature_info(FFmpegSupport RTS_BUILD_OPTION_FFMPEG "Building with FFmpeg support")
-add_feature_info(SDL3Windowing SAGE_USE_SDL3 "Using SDL3 for windowing (Linux)")
-add_feature_info(OpenALAudio SAGE_USE_OPENAL "Using OpenAL for audio (Linux)")
+add_feature_info(SDL3Windowing SAGE_USE_SDL3 "Using SDL3 for Android windowing")
+add_feature_info(OpenALAudio SAGE_USE_OPENAL "Using OpenAL for Android audio")
 add_feature_info(UpdateCheck SAGE_UPDATE_CHECK "In-game update check via GitHub Releases API")
-add_feature_info(SagePatch RTS_BUILD_OPTION_SAGE_PATCH "Build SagePatch QoL extras (macOS)")
 
 set(RTS_BUILD_OUTPUT_SUFFIX "" CACHE STRING "Suffix appended to output names of installable targets")
 
@@ -110,7 +101,6 @@ if(RTS_BUILD_OPTION_PROFILE_TRACY)
 else()
     add_library(core_profile_tracy INTERFACE)
 endif()
-# Linux port options (Phase 1)
 if(SAGE_USE_SDL3)
     target_compile_definitions(core_config INTERFACE SAGE_USE_SDL3)
     message(STATUS "SDL3 windowing backend enabled")
@@ -130,31 +120,4 @@ endif()
 if(SAGE_USE_GLM)
     target_compile_definitions(core_config INTERFACE SAGE_USE_GLM)
     message(STATUS "GLM math library enabled (DirectX 8 replacement)")
-endif()
-
-# macOS MoltenVK detection (Phase 5)
-# GeneralsX @build BenderAI 24/02/2026 - Phase 5 macOS port
-if(APPLE AND SAGE_USE_MOLTENVK)
-    find_package(Vulkan REQUIRED COMPONENTS MoltenVK)
-    if(NOT Vulkan_FOUND)
-        message(FATAL_ERROR "MoltenVK not found. Install from https://vulkan.lunarg.com/sdk/home#mac (LunarG installer to ~/VulkanSDK/<version>/macOS)")
-    endif()
-    
-    target_compile_definitions(core_config INTERFACE SAGE_USE_MOLTENVK)
-    target_link_libraries(core_config INTERFACE Vulkan::Vulkan)
-    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        # On iOS, MoltenVK links as a STATIC library, so its framework dependencies
-        # must be linked by the consumer (the macOS dylib resolved these itself).
-        target_link_libraries(core_config INTERFACE
-            "-framework Metal"
-            "-framework IOSurface"
-            "-framework CoreGraphics"
-            "-framework QuartzCore"
-            "-framework Foundation"
-            "-framework UIKit"
-        )
-    endif()
-    message(STATUS "MoltenVK (Vulkan on macOS) detected and enabled")
-    message(STATUS "  Vulkan SDK: ${Vulkan_INCLUDE_DIRS}")
-    message(STATUS "  MoltenVK: Will translate Vulkan to Metal")
 endif()

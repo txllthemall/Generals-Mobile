@@ -82,9 +82,8 @@ clear error at the step that needs them.
 
 ### `android-staging/` is gitignored
 
-The packaging script's (`package-android-zh.sh`) staging directory for
-fetched assets (fonts, default Turnip driver) -- build output, not source,
-matching the existing convention for `flatpak/staging/` and `ios/build/`.
+The packaging script's (`package-android-zh.sh`) staging directory for fetched
+assets (fonts and the optional default Turnip driver) is build output, not source.
 
 ## One-off binary assets (not scriptable, redo per session)
 
@@ -105,7 +104,7 @@ the result at the exact path the consuming tool expects:
 | CMake | `Kitware/CMake` release tarball | `/opt/vcpkg/downloads/cmake-<ver>-linux-x86_64.tar.gz` | vcpkg re-verifies on extract |
 | Ninja | `ninja-build/ninja` release zip | `/opt/vcpkg/downloads/ninja-linux-<ver>.zip` (exact filename vcpkg's log asks for -- not the URL's basename) | vcpkg re-verifies on extract |
 | patchelf | `NixOS/patchelf` release tarball | `/opt/vcpkg/downloads/patchelf-<ver>-x86_64.tar.gz` | SHA512 in `vcpkg_find_acquire_program(PATCHELF).cmake` |
-| Liberation fonts | `liberationfonts/liberation-fonts` release/attached-file tarball | extract, rename+copy the 4 `.ttf`s into `${GX_ANDROID_STAGING}/fonts/{arial,arialbold,couriernew,timesnewroman}.ttf` | SHA256 in `scripts/build/ios/stage-fonts.sh` |
+| Liberation fonts | `liberationfonts/liberation-fonts` release/attached-file tarball | extract, rename+copy the 4 `.ttf`s into `${GX_ANDROID_STAGING}/fonts/{arial,arialbold,couriernew,timesnewroman}.ttf` | SHA256 in `scripts/build/android/stage-fonts.sh` |
 | Turnip driver | `K11MCH1/AdrenoToolsDrivers` release zip | extract `meta.json` + the `.so` it names into `${GX_ANDROID_STAGING}/default_driver/` | `file` reports AArch64; no upstream checksum (script notes why) |
 | Vulkan Validation Layer | `KhronosGroup/Vulkan-ValidationLayers` `android-binaries-<ver>.zip` | extract `arm64-v8a/libVkLayer_khronos_validation.so` into `${GX_ANDROID_STAGING}/vulkan_validation/` | `file` reports AArch64, ~27MB unstripped -- this is expected, not a corrupt download |
 

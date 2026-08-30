@@ -1,5 +1,0 @@
-{
-    "chat.agent.maxRequests": 100,
-    "editor.defaultFormatter": "ms-vscode.cpptools",
-    "C_Cpp.default.compilerPath": "/usr/bin/clang++"
-}

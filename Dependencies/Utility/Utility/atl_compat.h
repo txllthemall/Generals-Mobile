@@ -51,14 +51,6 @@ extern "C" HRESULT WINAPI _ATL_DelegateQueryInterface(void* pv, REFIID riid, LPV
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
 #pragma GCC diagnostic ignored "-Wattributes"
 
-// NOTE: ReactOS ATL compile definitions are set in cmake/reactos-atl.cmake:
-//   - _ATL_CSTRING_EXPLICIT_CONSTRUCTORS
-//   - _ATL_NO_DEBUG_CRT
-//   - ATL_NO_ASSERT_ON_DESTROY_NONEXISTENT_WINDOW
-//   - ATL_NO_DEFAULT_LIBS
-// These are applied via target_compile_definitions() on the reactos_atl target.
-// Any target linking to reactos_atl will automatically inherit these definitions.
-//
 // IMPORTANT: _ATL_NO_AUTOMATIC_NAMESPACE is NOT defined because the codebase
 // uses ATL types (CComModule, CComObject, CString, etc.) without namespace
 // qualification and relies on the automatic 'using namespace ATL;' from ATL headers.
