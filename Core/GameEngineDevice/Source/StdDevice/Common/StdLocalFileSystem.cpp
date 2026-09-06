@@ -160,10 +160,6 @@ static void collectFileList(
 		}
 
 		if (!entryEc && iter->path().extension() == searchExt) {
-			// Store the logical path, not the physical overlay path. Later
-			// openFile() resolves that logical name through the mod root first,
-			// so a same-named mod file naturally replaces the base file while
-			// unique files from both roots remain visible.
 			std::filesystem::path logicalFile = logicalDirectory / iter->path().filename();
 			AsciiString newFilename(logicalFile.string().c_str());
 			filenameList.insert(newFilename);
@@ -201,8 +197,6 @@ static std::filesystem::path fixFilenameFromWindowsPath(const Char *filename, In
 	if (!std::filesystem::exists(path, ec) &&
 		((!(access & File::WRITE)) || ((access & File::WRITE) && !std::filesystem::exists(path.parent_path(), ec))))
 	{
-		// Resolve a relative read from the configured base asset root before
-		// falling back to cwd traversal.
 		if (!s_assetFallbackPath.empty() && path.is_relative()) {
 			std::filesystem::path assetRootPath = resolveExistingPathFromRoot(s_assetFallbackPath, path);
 			if (!assetRootPath.empty()) {
@@ -290,22 +284,27 @@ Bool StdLocalFileSystem::doesFileExist(const Char *filename) const
 
 void StdLocalFileSystem::getFileListInDirectory(const AsciiString& currentDirectory, const AsciiString& originalDirectory, const AsciiString& searchName, FilenameList & filenameList, Bool searchSubdirectories) const
 {
-	AsciiString asciisearch = originalDirectory;
+	// v125 hotfix: keep the vanilla/base directory walk byte-for-byte equivalent
+	// to v123. v124 replaced it with a recursive collector, which made an
+	// absolute game-data root discover nested BIG archives that v123 never
+	// treated as part of the primary ZH archive set. That changed INI precedence
+	// and mixed base Generals definitions into Zero Hour. Mod-only discovery is
+	// kept separate and is only added for relative loose-file directory scans.
+	AsciiString asciisearch;
+	asciisearch = originalDirectory;
 	asciisearch.concat(currentDirectory);
+	auto searchExt = std::filesystem::path(searchName.str()).extension();
 	if (asciisearch.isEmpty()) {
 		asciisearch = ".";
 	}
 
 	std::string fixedDirectory(asciisearch.str());
+
 #ifndef _WIN32
 	std::replace(fixedDirectory.begin(), fixedDirectory.end(), '\\', '/');
-	std::filesystem::path logicalDirectory(fixedDirectory);
-	const std::filesystem::path searchExt = std::filesystem::path(searchName.str()).extension();
 
 #if defined(__ANDROID__)
-	// Merge directory enumeration from the mod root and the base root. Both
-	// produce the same logical names; FilenameList deduplicates collisions,
-	// and openFile() resolves a collision to the mod copy first.
+	std::filesystem::path logicalDirectory(fixedDirectory);
 	const char *modRootValue = getenv("GENERALSX_MOD_DIR");
 	if (modRootValue != nullptr && modRootValue[0] != '\0' && logicalDirectory.is_relative()) {
 		std::string rootString(modRootValue);
@@ -314,45 +313,55 @@ void StdLocalFileSystem::getFileListInDirectory(const AsciiString& currentDirect
 		collectFileList(modDirectory, logicalDirectory, searchExt, filenameList, searchSubdirectories, FALSE);
 	}
 #endif
+#endif
 
-	collectFileList(logicalDirectory, logicalDirectory, searchExt, filenameList, searchSubdirectories, TRUE);
-#else
-	const auto searchExt = std::filesystem::path(searchName.str()).extension();
 	Bool done = FALSE;
 	std::error_code ec;
+
 	auto iter = std::filesystem::directory_iterator(fixedDirectory.c_str(), ec);
 	done = iter == std::filesystem::directory_iterator();
+
 	if (ec) {
 		DEBUG_LOG(("StdLocalFileSystem::getFileListInDirectory - Error opening directory %s", fixedDirectory.c_str()));
 		return;
 	}
+
 	while (!done) {
 		std::string filenameStr = iter->path().filename().string();
 		if (!iter->is_directory() && iter->path().extension() == searchExt &&
 			(strcmp(filenameStr.c_str(), ".") != 0 && strcmp(filenameStr.c_str(), "..") != 0)) {
 			AsciiString newFilename = iter->path().string().c_str();
-			filenameList.insert(newFilename);
+			if (filenameList.find(newFilename) == filenameList.end()) {
+				filenameList.insert(newFilename);
+			}
 		}
-		++iter;
+
+		iter++;
 		done = iter == std::filesystem::directory_iterator();
 	}
+
 	if (searchSubdirectories) {
-		iter = std::filesystem::directory_iterator(fixedDirectory, ec);
+		auto subIter = std::filesystem::directory_iterator(fixedDirectory, ec);
+
 		if (ec) {
+			DEBUG_LOG(("StdLocalFileSystem::getFileListInDirectory - Error opening subdirectory %s", fixedDirectory.c_str()));
 			return;
 		}
-		done = iter == std::filesystem::directory_iterator();
+
+		done = subIter == std::filesystem::directory_iterator();
+
 		while (!done) {
-			std::string filenameStr = iter->path().filename().string();
-			if(iter->is_directory() && filenameStr != "." && filenameStr != "..") {
+			std::string filenameStr = subIter->path().filename().string();
+			if(subIter->is_directory() &&
+				(strcmp(filenameStr.c_str(), ".") != 0 && strcmp(filenameStr.c_str(), "..") != 0)) {
 				AsciiString tempsearchstr(filenameStr.c_str());
 				getFileListInDirectory(tempsearchstr, originalDirectory, searchName, filenameList, searchSubdirectories);
 			}
-			++iter;
-			done = iter == std::filesystem::directory_iterator();
+
+			subIter++;
+			done = subIter == std::filesystem::directory_iterator();
 		}
 	}
-#endif
 }
 
 Bool StdLocalFileSystem::getFileInfo(const AsciiString& filename, FileInfo *fileInfo) const
