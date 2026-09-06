@@ -21,6 +21,10 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 *.so*
+# GeneralsX @build Android port ANGLE experiment - prebuilt ANGLE .so's are
+# a committed vendor artifact (see package-android-zh.sh), not a build
+# output, so they're exempt from the blanket *.so* ignore above.
+!Core/Libraries/Source/d3d8gles/angle-prebuilt/**/*.so
 CPackConfig.cmake
 CPackSourceConfig.cmake
 *.spec
@@ -88,3 +92,7 @@ logs_*.zip
 # Android packaging staging dir (scripts/build/android/package-android-zh.sh):
 # fetched fonts + default Turnip driver, re-derivable, not source.
 android-staging/
+# build-local-sandboxed.sh's own output APK -- a build product (GitHub LFS
+# is disabled on this fork, so a ~40MB binary can't go into version control
+# at all even if it were source), not something to commit.
+/GeneralsXZH-android-local.apk

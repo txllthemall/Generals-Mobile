@@ -136,6 +136,28 @@ if [[ -z "${LIBCXX}" ]]; then
 fi
 cp "${LIBCXX}" "${JNILIBS}/"
 
+# GeneralsX @build Android port ANGLE experiment - bundled prebuilt ANGLE
+# (Vulkan backend) so the GLES rendering path (d3d8gles) can route its EGL
+# context and gl* calls through ANGLE's Vulkan translation instead of the
+# device's own GLES driver (see gles_dispatch.cpp / SDL3Main.cpp's
+# GENERALSX_GLES_ANGLE toggle). Committed as prebuilt binaries, not rebuilt
+# here: this ANGLE checkout is a Vulkan-only Android arm64 build from the
+# AOSP mirror (android.googlesource.com/platform/external/angle), built with
+# a hand-bootstrapped gn+ninja toolchain instead of the official
+# depot_tools/gclient workflow (100GB+ disk, unavailable in this sandbox) --
+# not a build this script can reasonably reproduce on every run. Not
+# required by Vulkan itself, but both must ship because the Setup picker
+# exposes ANGLE and SDL loads its EGL library before creating the window.
+ANGLE_PREBUILT="${PROJECT_ROOT}/Core/Libraries/Source/d3d8gles/angle-prebuilt/arm64-v8a"
+if [[ -f "${ANGLE_PREBUILT}/libEGL_angle.so" && -f "${ANGLE_PREBUILT}/libGLESv2_angle.so" ]]; then
+    cp "${ANGLE_PREBUILT}/libEGL_angle.so" "${ANGLE_PREBUILT}/libGLESv2_angle.so" "${JNILIBS}/"
+    mkdir -p "${ANDROID_DIR}/app/src/main/assets/licenses"
+    cp "${ANGLE_PREBUILT}/../LICENSE" "${ANDROID_DIR}/app/src/main/assets/licenses/ANGLE-LICENSE.txt"
+else
+    echo "ERROR: prebuilt ANGLE libraries not found at ${ANGLE_PREBUILT}; the Render Backend picker requires both."
+    exit 1
+fi
+
 # Opt-in Vulkan validation layer (SDL3Main.cpp dxvk_validation.txt marker,
 # see docs/BUILD/ANDROID_SANDBOXED_LOCAL.md). Not required for the game to
 # run -- skip with a warning instead of failing the build if it isn't

@@ -54,6 +54,10 @@
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
+#if defined(__ANDROID__)
+// GeneralsX @build Android port GLES experiment - declares Direct3DCreate8_GLES
+#include "d3d8gles.h"
+#endif
 // GeneralsX @build BenderAI 10/02/2026 - Need LoadLibrary/GetProcAddress/FreeLibrary for dynamic loading
 #include "module_compat.h"
 // GeneralsX @build felipebraz 16/02/2026 - Need dlerror() for dlopen() error reporting on Linux
@@ -115,6 +119,8 @@ bool DX8Wrapper::s_pillarboxEnabled = false;
 bool DX8Wrapper::s_pillarboxActive = false;
 int DX8Wrapper::s_bbW = 0;
 int DX8Wrapper::s_bbH = 0;
+int DX8Wrapper::s_renderW = 0;
+int DX8Wrapper::s_renderH = 0;
 int DX8Wrapper::s_dstX = 0;
 int DX8Wrapper::s_dstY = 0;
 int DX8Wrapper::s_dstW = 0;
@@ -153,6 +159,40 @@ void DX8Wrapper::Pillarbox_Cleanup()
 	s_pillarboxActive = false;
 }
 
+// GeneralsX @bugfix Android port 08/30/2026 EXPERIMENT, currently PARKED AT
+// 1.0 -- see the real-device regression report below before ever raising
+// this again. The original idea: deliberately render the 3D scene + UI at
+// less than the device's native pixel count and let the existing pillarbox
+// blit upscale it, trading a small amount of resolution for fill-rate
+// headroom. That's safe for anything positioned through NDC-based drawing
+// (Render2DClass::Convert_Vert(), which all .wnd/HUD drawing goes through --
+// it never reads pixel counts, only ScreenResolution, so it's automatically
+// consistent regardless of viewport size). It is NOT safe for anything that
+// round-trips through PIXEL coordinates computed from View::getWidth()/
+// getHeight() -- confirmed by reading W3DView::worldToScreenTriReturn()
+// (Core/GameEngineDevice/.../W3DView.cpp), which projects to NDC then
+// converts to pixels via W3DLogicalScreenToPixelScreen(..., getWidth(),
+// getHeight()). getWidth()/getHeight() report the LOGICAL resolution
+// (ResolutionWidth/Height), which no longer matched the actual (smaller)
+// render-target/viewport pixel count once this scale went below 1.0 --
+// confirmed by a real-device test where every worldToScreen()-positioned
+// overlay (health bars via Drawable::drawIconUI(), called from
+// drawablePostDraw() -- itself called from inside drawViews(), i.e. the
+// low-res 3D pass) visibly shifted, while genuine 3D geometry (positioned
+// via the view/proj matrices, which are resolution-independent by
+// construction) stayed correct. The same getWidth()/getHeight() values also
+// drive W3DView::setWidth/setHeight's camera aspect-ratio and FOV/view-plane
+// setup and the click-to-world conversion (PixelScreenToW3DLogicalScreen) --
+// pervasive enough that safely decoupling render-target pixel count from
+// View's logical dimensions needs its own dedicated fix (making the 3D
+// pass's worldToScreen()-consumers aware of the actual render resolution),
+// not something to reattempt blindly alongside this constant.
+#if defined(__ANDROID__)
+static const float kPillarboxRenderScale = 1.0f;
+#else
+static const float kPillarboxRenderScale = 1.0f;
+#endif
+
 bool DX8Wrapper::Pillarbox_Setup(int gameW, int gameH)
 {
 	Pillarbox_Cleanup();
@@ -174,17 +214,22 @@ bool DX8Wrapper::Pillarbox_Setup(int gameW, int gameH)
 		}
 	}
 
-	// No pillarbox needed if backbuffer matches game resolution
-	if (bbW == gameW && bbH == gameH) return false;
+	int renderW = (int)(gameW * kPillarboxRenderScale) & ~1;
+	int renderH = (int)(gameH * kPillarboxRenderScale) & ~1;
+	if (renderW <= 0) renderW = gameW;
+	if (renderH <= 0) renderH = gameH;
 
-	// Create offscreen render target at game resolution
-	HRESULT hr = D3DDevice->CreateTexture(gameW, gameH, 1, D3DUSAGE_RENDERTARGET,
+	// No pillarbox needed if backbuffer matches the actual render resolution
+	if (bbW == renderW && bbH == renderH) return false;
+
+	// Create offscreen render target at the (possibly downscaled) render resolution
+	HRESULT hr = D3DDevice->CreateTexture(renderW, renderH, 1, D3DUSAGE_RENDERTARGET,
 		D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &s_offscreenTex);
 	if (FAILED(hr)) return false;
 	s_offscreenTex->GetSurfaceLevel(0, &s_offscreenSurf);
 
-	// Create dedicated depth stencil at game resolution
-	hr = D3DDevice->CreateDepthStencilSurface(gameW, gameH,
+	// Create dedicated depth stencil at the same render resolution
+	hr = D3DDevice->CreateDepthStencilSurface(renderW, renderH,
 		_PresentParameters.AutoDepthStencilFormat, D3DMULTISAMPLE_NONE, &s_depthSurf);
 	if (FAILED(hr)) {
 		s_offscreenSurf->Release(); s_offscreenSurf = nullptr;
@@ -194,8 +239,9 @@ bool DX8Wrapper::Pillarbox_Setup(int gameW, int gameH)
 
 	// Cache backbuffer size and compute aspect-correct fit rect once
 	s_bbW = bbW; s_bbH = bbH;
+	s_renderW = renderW; s_renderH = renderH;
 	s_pixelDensity = density;
-	float gameAspect = (float)gameW / (float)gameH;
+	float gameAspect = (float)renderW / (float)renderH;
 	float bbAspect = (float)bbW / (float)bbH;
 	if (bbAspect > gameAspect) {
 		s_dstW = (int)(bbH * gameAspect); s_dstH = bbH;
@@ -205,9 +251,12 @@ bool DX8Wrapper::Pillarbox_Setup(int gameW, int gameH)
 		s_dstX = 0; s_dstY = (bbH - s_dstH) / 2;
 	}
 	s_pillarboxEnabled = true;
-	fprintf(stderr, "INFO: Pillarbox: game=%dx%d, backbuffer=%dx%d, present=%ux%u, windowed=%d\n",
+	fprintf(stderr, "INFO: Pillarbox: game=%dx%d, render=%dx%d (scale=%.2f), backbuffer=%dx%d, present=%ux%u, windowed=%d\n",
 		gameW,
 		gameH,
+		renderW,
+		renderH,
+		kPillarboxRenderScale,
 		bbW,
 		bbH,
 		_PresentParameters.BackBufferWidth,
@@ -225,11 +274,17 @@ void DX8Wrapper::Pillarbox_Begin()
 	IsRenderToTexture = false;
 	// GeneralsX @bugfix GitHub Copilot 27/04/2026 Ensure scene render uses game-resolution viewport on the offscreen RT.
 	// Without this, a stale fullscreen-sized viewport can survive the target switch and crop/zoom into the top-left area.
+	// GeneralsX @bugfix Android port 08/30/2026 Use s_renderW/s_renderH (the
+	// offscreen render target's ACTUAL pixel size), not ResolutionWidth/
+	// ResolutionHeight -- these differ when kPillarboxRenderScale < 1.0.
+	// Using the logical resolution here would set a viewport larger than the
+	// render target, cropping/zooming into its top-left corner exactly like
+	// the stale-viewport bug this code already guards against.
 	D3DVIEWPORT8 sceneViewport = {
 		0,
 		0,
-		(DWORD)ResolutionWidth,
-		(DWORD)ResolutionHeight,
+		(DWORD)s_renderW,
+		(DWORD)s_renderH,
 		0.0f,
 		1.0f
 	};
@@ -260,7 +315,12 @@ void DX8Wrapper::Pillarbox_End()
 	D3DDevice->Clear(0, nullptr, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0);
 
 	// Use DX8Wrapper's cached state setters so the cache stays in sync — no invalidation needed.
-	D3DDevice->SetTexture(0, s_offscreenTex);
+	// GeneralsX @bugfix Android port 09/05/2026 The two SetTexture calls in this
+	// function used to be the exception to that sentence: they went straight to
+	// the device while every state setter around them went through the cache,
+	// so stage 0's cached binding was left claiming whatever was bound before.
+	// Routed through Set_DX8_Texture now, like the rest.
+	Set_DX8_Texture(0, s_offscreenTex);
 	Set_DX8_Render_State(D3DRS_ZENABLE, FALSE);
 	Set_DX8_Render_State(D3DRS_ZWRITEENABLE, FALSE);
 	Set_DX8_Render_State(D3DRS_LIGHTING, FALSE);
@@ -275,7 +335,32 @@ void DX8Wrapper::Pillarbox_End()
 	Set_DX8_Texture_Stage_State(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 	Set_DX8_Texture_Stage_State(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
 	Set_DX8_Texture_Stage_State(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	DWORD filterMode = (s_dstW == ResolutionWidth && s_dstH == ResolutionHeight)
+	// GeneralsX @bugfix Android port 09/04/2026 The engine's global default
+	// (Set_Default_Global_Render_States()) leaves D3DTSS_ADDRESSU/V at
+	// D3DTADDRESS_WRAP for every stage, and nothing here ever overrode it
+	// for this blit -- so whatever the last draw before this one happened
+	// to leave stage 0's address mode at is what s_offscreenTex got
+	// sampled with. WRAP maps straight to GL_REPEAT in the GLES backend
+	// (see gles_pipeline.cpp's texture-stage-state translation), and with
+	// bilinear filtering active (whenever s_dstW/H != s_renderW/H, i.e. any
+	// non-native chosen resolution -- confirmed on a real device: game=
+	// 1756x808 stretched to a 2510-wide destination), sampling near u=1 or
+	// v=1 wraps around and blends with texels from the OPPOSITE edge of
+	// the offscreen texture, producing a thin, one-sided streak of wrong
+	// content. Confirmed present on GLES/ANGLE and absent on Vulkan/DXVK on
+	// the same device with the same chosen resolution -- consistent with
+	// DXVK resolving D3D8's default address mode differently (or just not
+	// having this specific ambient-state-inheritance path). Explicitly
+	// clamping here removes the dependency on whatever state happened to
+	// be left over from the previous draw.
+	Set_DX8_Texture_Stage_State(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+	Set_DX8_Texture_Stage_State(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+	// GeneralsX @bugfix Android port 08/30/2026 Compare against s_renderW/
+	// s_renderH (the offscreen target's actual size), not ResolutionWidth/
+	// ResolutionHeight -- with kPillarboxRenderScale < 1.0 those always
+	// differ, so this check must reflect the real render-target size to
+	// still pick nearest-neighbor in the (now rarer) exact-match case.
+	DWORD filterMode = (s_dstW == s_renderW && s_dstH == s_renderH)
 		? D3DTEXF_POINT : D3DTEXF_LINEAR;
 	Set_DX8_Texture_Stage_State(0, D3DTSS_MINFILTER, filterMode);
 	Set_DX8_Texture_Stage_State(0, D3DTSS_MAGFILTER, filterMode);
@@ -284,13 +369,84 @@ void DX8Wrapper::Pillarbox_End()
 	float x0 = (float)s_dstX - 0.5f, y0 = (float)s_dstY - 0.5f;
 	float x1 = (float)(s_dstX + s_dstW) - 0.5f, y1 = (float)(s_dstY + s_dstH) - 0.5f;
 	struct BV { float x, y, z, rhw; float u, v; };
+
+	// GeneralsX @bugfix Android port 08/30/2026 v0Top/v1Bottom used to be a
+	// flat 0.0f/1.0f (v=0 sampling the destination's TOP), which is correct
+	// for a texture whose row 0 was pre-flipped at LOAD time to match D3D's
+	// v=0-means-top convention -- true of every normal asset texture this
+	// engine loads. s_offscreenTex is NOT one of those: it's a render
+	// target, populated purely by rasterization, never touched by any
+	// loader-side flip.
+	//
+	// Traced why that matters with concrete NDC/window/texture-storage
+	// arithmetic (real device report: whole composed frame -- 3D scene AND
+	// UI together -- upside down on both the system GLES driver and ANGLE,
+	// but never on Vulkan/DXVK, on a Redmi Note 8 Pro where Pillarbox
+	// actually engages: game=2264x1080 vs backbuffer=2340x1080). The scene
+	// was rendered into s_offscreenTex with m_yFlip=+1 (gles_pipeline.cpp),
+	// which correctly keeps D3D's clip.y=+1 (top) at NDC y=+1 with no extra
+	// negation. But NDC y=+1 becomes WINDOW-space y=height under OpenGL's
+	// own (bottom-origin) viewport transform, and OpenGL's own (equally
+	// bottom-origin) framebuffer-to-texture storage convention then places
+	// that same content at texel row (height-1) -- sampled at v=1, not
+	// v=0. So on the GLES/ANGLE backends specifically, v=0 samples this
+	// render target's BOTTOM, while the quad below put v=0 at the
+	// destination's TOP: an inversion. Vulkan has no such mismatch --
+	// window space and texture storage are both top-origin there, matching
+	// D3D already -- which is exactly why the same unmodified quad code has
+	// never shown this on DXVK.
+#if defined(__ANDROID__)
+	const bool flipForGLTextureStorage = !d3d8gles_ShouldUseVulkanBackend();
+#else
+	const bool flipForGLTextureStorage = false;
+#endif
+	const float v0Top = flipForGLTextureStorage ? 1.0f : 0.0f;
+	const float v1Bottom = flipForGLTextureStorage ? 0.0f : 1.0f;
 	BV quad[4] = {
-		{x0, y0, 0, 1, 0, 0}, {x1, y0, 0, 1, 1, 0},
-		{x0, y1, 0, 1, 0, 1}, {x1, y1, 0, 1, 1, 1},
+		{x0, y0, 0, 1, 0, v0Top}, {x1, y0, 0, 1, 1, v0Top},
+		{x0, y1, 0, 1, 0, v1Bottom}, {x1, y1, 0, 1, 1, v1Bottom},
 	};
 	D3DDevice->SetVertexShader(D3DFVF_XYZRHW | D3DFVF_TEX1);
 	D3DDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(BV));
-	D3DDevice->SetTexture(0, nullptr);
+	Set_DX8_Texture(0, nullptr);
+
+	// GeneralsX @bugfix Android port 09/05/2026 Restore the depth state this
+	// function turned off for the blit quad. It used to leave
+	// D3DRS_ZENABLE = FALSE behind, and nothing in the engine ever turns the
+	// depth TEST back on: ShaderClass drives ZFUNC and ZWRITEENABLE but never
+	// ZENABLE, because under a real D3D8 runtime it defaults to TRUE and stays
+	// there. The only other writers are W3DVolumetricShadow's stencil passes
+	// (High detail and above) and two occlusion paths in W3DScene that need
+	// units actually hidden behind buildings -- none of which is guaranteed to
+	// run. So with pillarbox enabled this reproduces, from frame 2 onward and
+	// at ANY detail level, exactly the bug being chased on Low: depth testing
+	// off for the whole scene, everything drawn in submission order, and the
+	// water painting over the terrain in front of it.
+	//
+	// Pillarbox happens to be inactive in the sessions where that bug was
+	// reported, so this is not its cause there -- it is the same defect waiting
+	// on a different trigger.
+	Set_DX8_Render_State(D3DRS_ZENABLE, D3DZB_TRUE);
+	Set_DX8_Render_State(D3DRS_ZWRITEENABLE, TRUE);
+}
+
+// GeneralsX @bugfix Android port 08/30/2026 EXPERIMENT: real separation of
+// 3D-scene resolution from UI resolution, as recommended by SGSR's own
+// integration notes ("draw 2D UI at device resolution ... while rendering
+// the 3D scene at a lower resolution"). Call after Pillarbox_End() has
+// already composited the (possibly downscaled) scene onto the backbuffer.
+// Render2DClass::Convert_Vert() computes NDC purely from ScreenResolution
+// (the logical, unchanged ResolutionWidth/ResolutionHeight) -- it never
+// reads the viewport -- so simply widening the viewport here to the real
+// letterboxed destination rect makes every subsequent NDC-space draw
+// (TheInGameUI->DRAW(), the mouse cursor, cinematic text, debug overlays,
+// all the way to WW3D::End_Render()) rasterize at native pixel density,
+// with no changes needed on the UI side at all.
+void DX8Wrapper::Pillarbox_Begin_UI()
+{
+	if (!s_pillarboxEnabled) return;
+	D3DVIEWPORT8 vp = {(DWORD)s_dstX, (DWORD)s_dstY, (DWORD)s_dstW, (DWORD)s_dstH, 0.0f, 1.0f};
+	D3DDevice->SetViewport(&vp);
 }
 
 bool DX8Wrapper::Pillarbox_Get_Rect(int& x, int& y, int& w, int& h)
@@ -591,6 +747,39 @@ bool DX8Wrapper::Init(void * hwnd, bool lite)
 		// GeneralsX @build BenderAI 10/02/2026 - Platform-specific DLL/SO/DYLIB loading (Phase 5: macOS)
 #ifdef _WIN32
 		D3D8Lib = LoadLibrary("D3D8.DLL");
+#elif defined(__ANDROID__)
+		// GeneralsX @build Android port render-backend picker 07/09/2026 -
+		// runtime backend switch (see d3d8gles_ShouldUseVulkanBackend() in
+		// d3d8gles.h/d3d8gles.cpp for the single source of truth this and
+		// SDL3Main.cpp's UseVulkanBackend() both now call -- they used to be
+		// two separate copies of this same check and drifted out of sync,
+		// see that function's comment for the resulting black-screen bug).
+		// Native GLES3 (Core/Libraries/Source/d3d8gles/) is the default;
+		// Vulkan/DXVK is opt-in. The GLES backend is statically linked into
+		// libmain.so, not dlopen'd, so it skips the LoadLibrary/
+		// GetProcAddress dance entirely.
+		{
+			bool useVulkan = d3d8gles_ShouldUseVulkanBackend();
+			if (!useVulkan) {
+				fprintf(stderr, "DEBUG: DX8Wrapper::Init() - Using native GLES3 backend (Direct3DCreate8_GLES)\n");
+				D3D8Lib = nullptr;
+				Direct3DCreate8Ptr = &Direct3DCreate8_GLES;
+			} else {
+				fprintf(stderr, "DEBUG: DX8Wrapper::Init() - Loading libdxvk_d3d8.so (Android, Vulkan opt-in)...\n");
+				D3D8Lib = LoadLibrary("libdxvk_d3d8.so");
+				fprintf(stderr, "DEBUG: DX8Wrapper::Init() - LoadLibrary result: %p\n", (void*)D3D8Lib);
+				if (D3D8Lib == nullptr) {
+					const char* error = dlerror();
+					fprintf(stderr, "ERROR: DX8Wrapper::Init() - dlerror(): %s\n", error ? error : "unknown");
+					return false;
+				}
+				Direct3DCreate8Ptr = (Direct3DCreate8Type) GetProcAddress(D3D8Lib, "Direct3DCreate8");
+				if (Direct3DCreate8Ptr == nullptr) {
+					fprintf(stderr, "ERROR: DX8Wrapper::Init() - Failed to get Direct3DCreate8 function\n");
+					return false;
+				}
+			}
+		}
 #elif defined(__APPLE__)
 		fprintf(stderr, "DEBUG: DX8Wrapper::Init() - Loading libdxvk_d3d8.dylib (Apple)...\n");
 		// iOS confines dlopen to the app bundle; bare names don't resolve there, so
@@ -616,6 +805,13 @@ bool DX8Wrapper::Init(void * hwnd, bool lite)
 		}
 #endif
 
+		// GeneralsX @build Android port GLES experiment - Android already set
+		// D3D8Lib and Direct3DCreate8Ptr above (for both the GLES and the
+		// Vulkan-opt-in sub-cases); the GLES sub-case intentionally leaves
+		// D3D8Lib null (nothing was dlopen'd), which the generic checks below
+		// would misread as a load failure. Every other platform still needs
+		// this shared dlopen-style resolution.
+#if !defined(__ANDROID__)
 		if (D3D8Lib == nullptr) {
 			fprintf(stderr, "ERROR: DX8Wrapper::Init() - Failed to load D3D8 library\n");
 			return false;	// Return false at this point if init failed
@@ -627,6 +823,12 @@ bool DX8Wrapper::Init(void * hwnd, bool lite)
 			fprintf(stderr, "ERROR: DX8Wrapper::Init() - Failed to get Direct3DCreate8 function\n");
 			return false;
 		}
+#else
+		if (Direct3DCreate8Ptr == nullptr) {
+			fprintf(stderr, "ERROR: DX8Wrapper::Init() - Direct3DCreate8Ptr was not set by the Android backend switch\n");
+			return false;
+		}
+#endif
 
 		/*
 		** Create the D3D interface object
@@ -1230,6 +1432,27 @@ void DX8Wrapper::Get_Format_Name(unsigned int format, StringClass *tex_format)
 
 void DX8Wrapper::Resize_And_Position_Window()
 {
+#if defined(__ANDROID__)
+	// GeneralsX @bugfix Android port 08/31/2026 On Android the "window" IS
+	// the screen -- there is no OS-level concept of resizing/repositioning
+	// it to something smaller than the display, the way a desktop window
+	// can be. This function's SDL path below (SetWindowPos -> SDL_
+	// SetWindowSize under the hood) still tried to shrink the actual SDL
+	// window/surface to match a newly chosen (smaller) ResolutionWidth/
+	// Height whenever a user picked a lower resolution in Options.
+	// Confirmed on a real device: after doing that, the resulting
+	// resolution-confirmation dialog's OK/Cancel buttons (and every other
+	// touch target) stopped responding entirely -- shrinking the real
+	// window/surface desyncs Android's touch-coordinate space from
+	// whatever the renderer now thinks the screen looks like. This is
+	// exactly what the pillarbox mechanism (dx8wrapper.cpp's Pillarbox_*)
+	// already exists to handle correctly: it letterboxes/centers a game
+	// resolution smaller than the real (unchanged) backbuffer without ever
+	// touching the actual window/surface. Skip this function entirely on
+	// Android -- Set_Device_Resolution() below still updates ResolutionWidth
+	// /Height and re-runs Pillarbox_Setup() with them either way.
+	return;
+#endif
 	// Get the current dimensions of the 'render area' of the window
 	RECT rect = { 0 };
 	::GetClientRect (_Hwnd, &rect);
@@ -1708,6 +1931,27 @@ void DX8Wrapper::Get_Render_Target_Resolution(int & set_w,int & set_h,int & set_
 		set_bits			= BitDepth;		// should we get the actual bit depth of the target?
 		set_windowed	= IsWindowed;	// this doesn't really make sense for render targets (shouldn't matter)...
 
+	// GeneralsX @bugfix Android port 08/30/2026 CurrentRenderTarget==nullptr
+	// means "the real default backbuffer", but Get_Device_Resolution() below
+	// reports ResolutionWidth/ResolutionHeight -- the LOGICAL game
+	// resolution, which the pillarbox mechanism can deliberately (or
+	// incidentally, e.g. an SDL window-size-measurement rounding quirk)
+	// differ from the real backbuffer's actual pixel size (s_bbW/s_bbH).
+	// WW3D::Begin_Render() sets its clear-time viewport from THIS function's
+	// output, and this device's D3D8 Clear() emulation only clears the
+	// current viewport's rect -- so reporting the logical size here instead
+	// of the real backbuffer size left a permanent uncleared strip on any
+	// frame that renders straight to the backbuffer without going through
+	// the pillarbox offscreen-target dance (whose own end-of-frame blit
+	// clears the full real backbuffer). Confirmed on a real device: the
+	// load-screen/briefing render path (W3DDisplay.cpp) skips Pillarbox
+	// entirely, and a sliver of stale old-frame content stayed visible at
+	// the strip Get_Device_Resolution()'s narrower number never covered.
+	} else if (s_pillarboxEnabled) {
+		set_w				= s_bbW;
+		set_h				= s_bbH;
+		set_bits			= BitDepth;
+		set_windowed	= IsWindowed;
 	} else {
 		Get_Device_Resolution (set_w, set_h, set_bits, set_windowed);
 	}
@@ -2097,6 +2341,27 @@ void DX8Wrapper::End_Scene(bool flip_frames)
 		Pillarbox_End();
 		// GeneralsX @bugfix GitHub Copilot 10/05/2026 Re-sync cached DX8 state after the pillarbox blit mutates global render state at the end of the frame.
 		Invalidate_Cached_Render_States();
+	}
+	// GeneralsX @bugfix Android port 08/30/2026 Unconditionally restore a
+	// full-backbuffer viewport here, regardless of whether Pillarbox_End()
+	// ran above. Pillarbox_Begin_UI() (called mid-frame, from W3DDisplay.cpp
+	// right after drawViews()) narrows the viewport to the letterboxed
+	// destination rect for the rest of the frame's UI/overlay drawing, and
+	// nothing else was resetting it back afterward. This device's D3D8
+	// Clear() emulation deliberately clears only the CURRENT VIEWPORT's rect
+	// when no explicit rects are given (matches real D3D8 semantics -- see
+	// WebGLPipeline::clear()'s "D3D clears the viewport region only"
+	// comment), so a leftover narrow viewport meant any frame that calls
+	// Clear() without first going through Pillarbox_Begin() again (e.g. the
+	// load-screen branch in W3DDisplay.cpp, which skips the whole
+	// Pillarbox_Begin()/drawViews()/Pillarbox_End() sequence entirely) would
+	// only clear that same narrow rect -- leaving a stale strip of the
+	// previous frame's content visible outside it. Confirmed by a real-
+	// device report: a sliver of leftover battle-scene content next to the
+	// intro/briefing cinematic text while the game was still loading.
+	if (s_pillarboxEnabled) {
+		D3DVIEWPORT8 fullVp = {0, 0, (DWORD)s_bbW, (DWORD)s_bbH, 0.0f, 1.0f};
+		D3DDevice->SetViewport(&fullVp);
 	}
 	DX8CALL(EndScene());
 

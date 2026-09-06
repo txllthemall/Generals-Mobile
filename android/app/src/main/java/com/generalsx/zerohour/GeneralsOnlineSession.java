@@ -54,6 +54,18 @@ final class GeneralsOnlineSession {
 
     static final String API_BASE = "https://api.playgenerals.online/env/prod/contract/1/";
 
+    // GeneralsX @bugfix Android port 08/30/2026 Mirrors Network_
+    // UseAlternativeEndpoint() in the native client (GeneralsOnline_Settings.h/
+    // OnlineServices_Init.cpp), which exists specifically because some
+    // players can't reach api.playgenerals.online directly (ISP/DNS-level
+    // filtering is the documented reason for that setting existing at all)
+    // even though the login WEBSITE (www.playgenerals.online, a different
+    // host) works fine for them. The native client only exposes this as a
+    // manual settings toggle; this launcher has no settings screen for it
+    // yet, so postJson() below falls back to it automatically whenever the
+    // primary host doesn't answer.
+    static final String API_BASE_ALT = "https://api-ru.playgenerals.online/env/prod/contract/1/";
+
     static final String PREFS_NAME = "generalsonline_session";
     static final String PREF_SESSION_TOKEN = "session_token";
     static final String PREF_REFRESH_TOKEN = "refresh_token";
@@ -74,14 +86,55 @@ final class GeneralsOnlineSession {
         String wsUri = "";
     }
 
+    // GeneralsX @bugfix Android port 08/30/2026 A user reported the network-
+    // error screen with no way to see WHY -- no adb, no logcat access, just
+    // a generic "check your connection" string. This captures the actual
+    // failure (host tried, HTTP status + a body snippet, or the exception)
+    // from the most recent postJson() call so the caller can put it right
+    // on screen. Single mutable field is fine: this launcher only ever runs
+    // one login/refresh attempt at a time.
+    static volatile String lastNetworkErrorDetail = "";
+
     private GeneralsOnlineSession() {
     }
 
     // Runs on a background thread.
+    //
+    // GeneralsX @bugfix Android port 08/30/2026 Falls back to API_BASE_ALT
+    // when the primary host is unreachable or rejects the request at the
+    // transport level. Confirmed live (curl) that api.playgenerals.online
+    // can answer a CheckLogin call with HTTP 403 while still returning a
+    // body shaped exactly like a normal AuthResponse
+    // ({"result":2,"session_token":"",...}) -- postJsonOnce() below now
+    // treats any non-2xx status as a transport failure (null) rather than
+    // trusting that body's "result" field, so a rejected/blocked request
+    // can no longer be misread as "the user's login attempt failed" (it
+    // previously was: state=2 is FAILED, same as a real failed login,
+    // and the UI has no way to tell the two apart). That alone fixed the
+    // mislabeling; this fallback additionally gives blocked requests a
+    // second real chance via the alternate host before giving up.
     static AuthResult postJson(String endpoint, JSONObject body, String bearerToken) {
+        StringBuilder errors = new StringBuilder();
+        AuthResult result = postJsonOnce(API_BASE, endpoint, body, bearerToken, errors);
+        if (result != null) {
+            lastNetworkErrorDetail = "";
+            return result;
+        }
+        Log.w(TAG, "primary API endpoint (" + API_BASE + ") unreachable or rejected the request; retrying via alternate endpoint");
+        result = postJsonOnce(API_BASE_ALT, endpoint, body, bearerToken, errors);
+        lastNetworkErrorDetail = errors.toString().trim();
+        if (result != null) {
+            lastNetworkErrorDetail = "";
+        } else {
+            Log.w(TAG, "both API endpoints failed for " + endpoint + ": " + lastNetworkErrorDetail);
+        }
+        return result;
+    }
+
+    private static AuthResult postJsonOnce(String base, String endpoint, JSONObject body, String bearerToken, StringBuilder errorOut) {
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(API_BASE + endpoint);
+            URL url = new URL(base + endpoint);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
@@ -97,8 +150,22 @@ final class GeneralsOnlineSession {
             }
 
             int status = conn.getResponseCode();
-            java.io.InputStream in = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+            if (status < 200 || status >= 300) {
+                // See the class-level comment on postJson(): a non-2xx
+                // response is a transport/policy rejection, not an answer
+                // about the login attempt itself, even when its body
+                // happens to parse as a valid-looking AuthResponse.
+                errorOut.append(hostOf(base)).append(": HTTP ").append(status);
+                String snippet = readSnippet(conn.getErrorStream());
+                if (!snippet.isEmpty()) {
+                    errorOut.append(" ").append(snippet);
+                }
+                errorOut.append("; ");
+                return null;
+            }
+            java.io.InputStream in = conn.getInputStream();
             if (in == null) {
+                errorOut.append(hostOf(base)).append(": empty response body; ");
                 return null;
             }
             JSONObject json = new JSONObject(readAll(in));
@@ -112,11 +179,42 @@ final class GeneralsOnlineSession {
             result.wsUri = json.optString("ws_uri", "");
             return result;
         } catch (Exception e) {
+            errorOut.append(hostOf(base)).append(": ").append(e.getClass().getSimpleName());
+            if (e.getMessage() != null) {
+                errorOut.append(": ").append(e.getMessage());
+            }
+            errorOut.append("; ");
             return null;
         } finally {
             if (conn != null) {
                 conn.disconnect();
             }
+        }
+    }
+
+    private static String hostOf(String base) {
+        try {
+            return new URL(base).getHost();
+        } catch (Exception e) {
+            return base;
+        }
+    }
+
+    // Best-effort, truncated: this is for on-screen diagnostics, not a full
+    // dump -- a WAF/proxy error page can be arbitrarily large.
+    private static String readSnippet(java.io.InputStream in) {
+        if (in == null) {
+            return "";
+        }
+        try {
+            String body = readAll(in);
+            body = body.replaceAll("\\s+", " ").trim();
+            if (body.length() > 200) {
+                body = body.substring(0, 200) + "...";
+            }
+            return body;
+        } catch (Exception e) {
+            return "";
         }
     }
 

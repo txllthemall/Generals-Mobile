@@ -21,6 +21,11 @@
     <string name="setup_status_folder_line">مجلد اللعبة: %1$s\n</string>
     <string name="setup_status_folder_valid">الحالة: يبدو صحيحًا (تم العثور على ملفات أرشيف اللعبة).\n</string>
     <string name="setup_status_folder_invalid">الحالة: هذا المجلد لا يحتوي على INIZH.big / INI.big المتوقعة — تحقق من أنك اخترت المجلد الصحيح.\n</string>
+    <string name="setup_status_folder_incomplete">الحالة: تم العثور على ملفات أرشيف اللعبة، لكنها تبدو غير مكتملة أو تالفة (%1$s) — من المرجح أن تتعطل اللعبة عند التشغيل. حاول نسخ ملفات اللعبة من مصدر نظيف من جديد.\n</string>
+    <string name="setup_dialog_folder_problem_title">مشكلة في مجلد اللعبة</string>
+    <string name="setup_folder_issue_empty_file">%1$s فارغ (0 بايت)</string>
+    <string name="setup_folder_issue_bad_header">%1$s لا يبدو أرشيف لعبة صالحًا</string>
+    <string name="setup_folder_issue_missing_data">%1$s ينقصه بيانات لعبة متوقعة — على الأرجح نسخة غير مكتملة</string>
     <string name="setup_status_logs_note">سجلات الأعطال/المحرك مخزنة في التخزين الخاص بالتطبيق ولا يمكن الوصول إليها إلا عبر \"عرض السجلات\" أعلاه — يقوم أندرويد بإخفائها عمدًا عن مديري الملفات العاديين (هذا هو العزل المعتاد في أندرويد، وليس خاصية مميزة لهذا التطبيق).</string>
 
     <!-- SetupActivity: Language card -->
@@ -40,6 +45,18 @@
     <string name="setup_button_apply_text_size">تطبيق حجم نص القائمة</string>
     <string name="setup_text_size_help">يُكبّر أو يُصغّر نص معظم أزرار/تسميات القائمة حسب دقة الشاشة. القيمة الافتراضية للعبة هي 70؛ القيم الأعلى تجعل نص القائمة أكبر. يسري المفعول عند تشغيل اللعبة في المرة القادمة، وليس فورًا.</string>
     <string name="setup_toast_text_size_saved">تم الحفظ. سيسري المفعول في المرة القادمة التي تشغّل فيها اللعبة.</string>
+
+    <!-- SetupActivity: Render Backend card -->
+    <string name="setup_card_render_backend">خلفية الرسومات</string>
+    <string name="setup_render_backend_help">واجهة الرسومات (API) التي تستخدمها اللعبة. يسري المفعول عند تشغيل اللعبة في المرة القادمة، وليس فورًا.\n\nVulkan (موصى به): الخيار الأصلي والأكثر اختبارًا (عبر ترجمة DXVK من Direct3D 8 إلى Vulkan). تعمل معظم الهواتف الحديثة (مثل سلسلة Snapdragon 8 Gen/Elite) بشكل ممتاز مع برنامج التشغيل الافتراضي، دون أي إعداد إضافي. قسم «برنامج تشغيل Vulkan مخصص» أدناه اختياري ويهم فقط بعض معالجات Adreno القديمة التي يُبلّغ برنامج تشغيلها الافتراضي عن إصدار أقل من Vulkan 1.1 — يُطبَّق تلقائيًا فقط على الهواتف التي تحتاجه فعليًا.\n\nOpenGL ES: بديل تجريبي أصلي للهواتف التي لا يمكنها استخدام Vulkan إطلاقًا (معالجات رسومية قديمة جدًا أو غير مدعومة). يعمل في كل مكان تقريبًا، لكنه أبطأ بشكل ملحوظ من الخيارين الآخرين — اعتبره الملاذ الأخير، لا الخيار الأول.\n\nOpenGL ES + ANGLE: نفس المُصيِّر التجريبي، لكن مع تضمين ANGLE من Google وتوجيه الرسم عبره (يُترجَم إلى Vulkan) بدلاً من برنامج تشغيل GLES المدمج في الهاتف. نسخة ANGLE هذه مُضمَّنة مباشرة داخل التطبيق — وعلى عكس ميزة ANGLE الخاصة بنظام Android نفسه، لا تتطلب حدًا أدنى لإصدار Android ولا مفتاح تبديل منفصل في إعدادات هاتفك. أسرع بشكل ملحوظ من OpenGL ES العادي بعد التشغيل، لكن قد يحدث تقطّع قصير عند فتح قائمة تحتوي عناصر تحكم كثيرة (مثل خيارات المناوشة) لأول مرة، بينما يُجمِّع ANGLE ما يحتاجه؛ يزول التقطّع من تلقاء نفسه ولا يتكرر حتى تغادر تلك القائمة وتفتحها مجددًا.\n\nقسما «برنامج تشغيل Vulkan مخصص» و«إعدادات DXVK» أدناه يظهران فقط عند اختيار Vulkan.</string>
+    <string name="setup_render_backend_status">الحالي: %1$s</string>
+    <string name="setup_button_change_render_backend">تغيير خلفية الرسومات</string>
+    <string name="setup_render_backend_dialog_title">اختر خلفية الرسومات</string>
+    <string name="setup_render_backend_vulkan">Vulkan</string>
+    <string name="setup_render_backend_gles">OpenGL ES (تجريبي)</string>
+    <string name="setup_render_backend_gles_angle">OpenGL ES + ANGLE (تجريبي)</string>
+    <string name="setup_toast_render_backend_saved">تم الحفظ. سيسري المفعول في المرة القادمة التي تشغّل فيها اللعبة.</string>
+    <string name="setup_toast_render_backend_failed">تعذّر حفظ اختيار خلفية الرسومات: %1$s</string>
 
     <!-- SetupActivity: Custom Vulkan Driver card -->
     <string name="setup_card_vulkan_driver">برنامج تشغيل Vulkan مخصص (متقدم، لمعالجات Adreno فقط)</string>
@@ -90,6 +107,7 @@
     <string name="setup_toast_grant_all_files">امنح إذن \"السماح بالوصول لإدارة جميع الملفات\" في الشاشة التالية، ثم عد واضغط على اختيار مجلد اللعبة مرة أخرى.</string>
     <string name="setup_toast_folder_saved">تم حفظ مجلد اللعبة.</string>
     <string name="setup_toast_folder_saved_invalid">تم الحفظ، لكن لم يتم العثور على INIZH.big/INI.big هناك — تحقق من المجلد.</string>
+    <string name="setup_toast_folder_saved_incomplete">تم الحفظ، لكن بعض ملفات اللعبة تبدو غير مكتملة أو تالفة — راجع التفاصيل في الشاشة الرئيسية قبل التشغيل.</string>
     <string name="setup_toast_marker_save_failed">تعذر حفظ علامة المجلد: %1$s</string>
     <string name="setup_toast_folder_cleared">تمت إعادة التعيين. ستستخدم اللعبة مجلدها الافتراضي.</string>
     <string name="setup_toast_options_dir_failed">تعذر إنشاء مجلد لملف Options.ini</string>
