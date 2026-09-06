@@ -50,9 +50,30 @@ temporary landscape-orientation experiment. Their intermediate behavior is not e
   Their useful content replaces the new entries in the removed cross-platform
   `PORTING_PATTERNS.md`; that archived document is not restored.
 
+### Secondary mod-folder overlay
+
+Generals Mobile adds a separate pre-launch mod-folder selector on top of the
+upstream integration. The base game folder saved by Setup is never replaced or
+modified.
+
+- The normal game launcher offers `Launch base game`, `Select / change mod
+  folder`, `Launch selected mod`, and `Clear selected mod`.
+- The selected folder is exposed to native code as `GENERALSX_MOD_DIR` only for
+  a mod launch. Launching the base game clears the variable.
+- Relative loose-file reads check the mod root first, then fall back to the
+  ordinary base-game cwd/asset root. Writes are never redirected into the mod.
+- Relative directory enumeration merges base and mod logical filenames, so
+  loose-file directory scans can discover mod-only files while same-named files
+  resolve through the mod-first read path.
+- Mod `.big` archives are loaded after the primary Zero Hour and base Generals
+  archives with `overwrite=TRUE`, giving the mod archive entries override
+  priority without copying files over the installation.
+- Absolute archive paths are never remapped through the loose-file overlay.
+- With no mod selected the native filesystem follows the previous path exactly.
+
 ## Validation
 
-Local checks completed:
+Local checks completed before the secondary-folder work:
 
 - All 30 ordered DXVK patches apply to the pinned `46a3bc018bcae408d49d3c500e4e536a11f6789a`
   source; repeating the application logic confirms idempotency.
@@ -65,8 +86,8 @@ Local checks completed:
 - Bundled ANGLE libraries are AArch64 ELF shared objects with the expected SONAMEs.
 
 Full Android compilation and APK packaging are validated through the existing
-`build-android.yml` pull-request workflow. See the PR checks for the result.
-Local helper checks alone do not establish that the full application compiles.
+`build-android.yml` pull-request workflow. See the PR checks for the current
+result. Physical-device behavior still requires testing.
 
 ## Physical-device checks still required
 
@@ -75,6 +96,9 @@ Local helper checks alone do not establish that the full application compiles.
 - Check build icons, terrain, aircraft shadows, water, text, partial viewports and screen edges.
 - Check Home/recents/resume, both landscape orientations, touch input and the GameSir controller.
 - Check stock and nested game-data layouts, damaged archives and GeneralsOnline network failures.
+- Select a mod containing a same-named loose file and confirm it overrides base while a base-only file still loads.
+- Select a mod containing a `.big` override and confirm it wins over base archives; clear the mod and confirm vanilla behavior returns.
+- Confirm the base game folder remains byte-for-byte untouched across mod selection and launch.
 - Compare the same map, units, detail and resolution across backends before claiming an FPS gain.
 
 The upstream release's reported Mali FPS gain is not a measurement of this build
