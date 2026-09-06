@@ -34,9 +34,13 @@
 static void drawFramerateBar();
 
 // SYSTEM INCLUDES ////////////////////////////////////////////////////////////
+#include <chrono>
 #include <numeric>
 #include <stdlib.h>
 #include <windows.h>
+// GeneralsX @build Android port GLES experiment - see gxTraceDisplayDrawPhase
+// in W3DDisplay::draw() below.
+#include "GXTrace.h"
 // GeneralsX @bugfix BenderAI 13/02/2026 - io.h is Windows-specific, use unistd.h on Linux
 #ifdef _WIN32
 #include <io.h>
@@ -69,6 +73,8 @@ static void drawFramerateBar();
 #include "GameClient/Mouse.h"
 #include "GameClient/GlobalLanguage.h"
 #include "GameClient/Water.h"
+#include "GameClient/Shell.h"
+#include "GameClient/WindowLayout.h"
 
 #include "GameNetwork/NetworkInterface.h"
 #include "Common/ModelState.h"
@@ -621,6 +627,24 @@ static void buildFilteredResolutions()
 	DX8Wrapper::GetNativeDisplaySize(nativeW, nativeH, density);
 	if (nativeW <= 0 || nativeH <= 0) { nativeW = 1024; nativeH = 768; }
 	s_filteredResolutions.push_back({ nativeW, nativeH, 32 });
+	// GeneralsX @bugfix Android port 08/31/2026 Users have asked for a manual
+	// way to trade resolution for FPS on weaker devices. Unlike the earlier
+	// pillarbox-render-scale experiment (which decoupled the RENDER
+	// resolution from the LOGICAL one and broke worldToScreen()-based UI
+	// positioning -- see dx8wrapper.cpp's kPillarboxRenderScale comment),
+	// picking one of these entries goes through the same
+	// setDisplayMode()/WW3D::Set_Device_Resolution() path desktop users have
+	// always used to change resolution: it updates ResolutionWidth/Height
+	// (and therefore worldToScreen(), UI layout, camera aspect, font-size
+	// bucketing) all consistently together, so there's no split-brain
+	// mismatch. The existing pillarbox mechanism still centers/letterboxes
+	// whichever of these doesn't exactly fill the native screen, exactly as
+	// it already does for the native entry today.
+	for (int pct : {85, 70, 55}) {
+		int w = (nativeW * pct / 100) & ~1;
+		int h = (nativeH * pct / 100) & ~1;
+		if (w > 0 && h > 0) s_filteredResolutions.push_back({ w, h, 32 });
+	}
 	s_filteredDirty = false;
 	return;
 #else
@@ -700,6 +724,15 @@ Bool W3DDisplay::setDisplayMode( UnsignedInt xres, UnsignedInt yres, UnsignedInt
 		#endif
 		Render2DClass::Set_Screen_Resolution(RectClass(0, 0, xres, yres));
 		Display::setDisplayMode(xres, yres, bitdepth, windowed);
+
+		// GeneralsX @bugfix Android port 09/04/2026 REVERTED: forcing
+		// m_2DRender's coordinate range to WW3D::Get_Render_Target_Resolution()
+		// here was confirmed WRONG on a real device -- see render2d.cpp's
+		// matching revert for the full explanation (Render2DClass still
+		// draws into Pillarbox's small offscreen render target, so the
+		// logical-resolution range that setWidth()/setHeight() just set,
+		// two lines up via Display::setDisplayMode(), was already correct).
+
 		return TRUE;
 	}
 
@@ -1089,6 +1122,18 @@ void W3DDisplay::init()
 			DEBUG_CRASH( ("Unable to set render device") );
 			return;
 		}
+
+		// GeneralsX @bugfix Android port 09/04/2026 REVERTED: this refresh
+		// (forcing m_2DRender's coordinate range to WW3D::Get_Render_Target_Resolution())
+		// was confirmed WRONG on a real device at a non-100% pillarbox
+		// resolution -- Render2DClass still draws into Pillarbox's small
+		// offscreen render target (there's no separate native-resolution UI
+		// pass), so forcing its coordinate range to the REAL backbuffer size
+		// while the actually-bound target is still the smaller offscreen
+		// texture made UI/video get clipped to the texture's real bounds,
+		// which Pillarbox_End()'s blit then visibly stretched -- worse than
+		// before (UI/video confined to a shrunken box). See render2d.cpp's
+		// matching revert for the full explanation.
 
 		#ifdef SAGE_USE_SDL3
 		SDL3_ApplyWindowModeForRenderConfig(getWindowed(), getWidth(), getHeight());
@@ -1968,6 +2013,56 @@ void W3DDisplay::step()
 
 //DECLARE_PERF_TIMER(BigAssRenderLoop)
 
+// GeneralsX @build Android port GLES experiment - GameClient.cpp's
+// [GX-PERF-CLIENT] breakdown already showed the entire "draw" bucket
+// (TheDisplay->DRAW(), i.e. this function) climbing from a few ms to
+// 70-90ms/frame as the ShellMapMD battle escalates, with everything else
+// (input/drawables/terrainDisplay/uiTail) staying near zero -- so the cost
+// is genuinely inside this function, not before or after it. Two earlier
+// hypotheses (draw-call count via GPU instancing, GL texture create/destroy
+// churn) were each tested on a real device and neither moved FPS at all,
+// so before trying another point fix, split this function's own major
+// blocks: view/particle updates, the water-reflection and projected-shadow
+// render-to-texture passes (each a full extra scene render, scaling with
+// the same battle content as the main view), the main scene render
+// (drawViews()), and the UI/mouse/present tail -- to see which one
+// actually owns the growing cost instead of guessing again.
+static void gxTraceDisplayDrawPhase(double preRTTUs, double waterShadowRTTUs,
+	double mainSceneUs, double uiWidgetsUs, double presentUs)
+{
+	static std::chrono::steady_clock::time_point s_windowStart = std::chrono::steady_clock::now();
+	static double s_preRTTUs = 0, s_waterShadowRTTUs = 0, s_mainSceneUs = 0, s_uiWidgetsUs = 0, s_presentUs = 0;
+	static int s_frames = 0;
+
+	s_preRTTUs += preRTTUs;
+	s_waterShadowRTTUs += waterShadowRTTUs;
+	s_mainSceneUs += mainSceneUs;
+	s_uiWidgetsUs += uiWidgetsUs;
+	s_presentUs += presentUs;
+	++s_frames;
+
+	std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+	double elapsedUs = std::chrono::duration<double, std::micro>(now - s_windowStart).count();
+	if (elapsedUs >= 1'000'000.0 && s_frames > 0)
+	{
+		// uiWidgets = TheInGameUI->DRAW() (winRepaint() -- every .wnd control);
+		// present = mouse/debug draw + WW3D::End_Render() (the actual swap).
+		// Split out of the old single "uiPresent" number -- see the comment at
+		// gxdT3b's assignment above for why.
+		GX_PERF_TRACE("[GX-PERF-DISPLAY] frames=%d preRTT=%.2fms waterShadowRTT=%.2fms mainScene=%.2fms uiWidgets=%.2fms present=%.2fms\n",
+			s_frames,
+			s_preRTTUs / 1000.0 / s_frames,
+			s_waterShadowRTTUs / 1000.0 / s_frames,
+			s_mainSceneUs / 1000.0 / s_frames,
+			s_uiWidgetsUs / 1000.0 / s_frames,
+			s_presentUs / 1000.0 / s_frames);
+
+		s_windowStart = now;
+		s_preRTTUs = s_waterShadowRTTUs = s_mainSceneUs = s_uiWidgetsUs = s_presentUs = 0;
+		s_frames = 0;
+	}
+}
+
 // W3DDisplay::draw ===========================================================
 /** Draw the entire W3D Display */
 //=============================================================================
@@ -1975,6 +2070,8 @@ void W3DDisplay::step()
 void W3DDisplay::draw()
 {
 	//USE_PERF_TIMER(W3DDisplay_draw)
+	const bool gxPerfTrace = GXTrace::isPerfEnabled();
+	std::chrono::steady_clock::time_point gxdT0, gxdT1, gxdT2, gxdT3, gxdT3b;
 
 	// GeneralsX @feature xxorza 15/04/2026 Process deferred window resize for pillarbox
 	DX8Wrapper::Pillarbox_Process_Resize();
@@ -2118,6 +2215,8 @@ AGAIN:
 
 	do {
 
+		if (gxPerfTrace) gxdT0 = std::chrono::steady_clock::now();
+
 		// update all views of the world - recomputes data which will affect drawing
 		if (DX8Wrapper::_Get_D3D_Device8() && (DX8Wrapper::_Get_D3D_Device8()->TestCooperativeLevel()) == D3D_OK)
 		{	//Checking if we have the device before updating views because the heightmap crashes otherwise while
@@ -2133,6 +2232,7 @@ AGAIN:
                                            //REVOLUTIONARY!
                                            //-LORENZEN
 
+			if (gxPerfTrace) gxdT1 = std::chrono::steady_clock::now();
 
 			if (TheWaterRenderObj && TheGlobalData->m_waterType == 2)
 				TheWaterRenderObj->updateRenderTargetTextures(primaryW3DView->get3DCamera());	//do a render into each texture
@@ -2142,6 +2242,8 @@ AGAIN:
 			if (TheW3DProjectedShadowManager)
 				TheW3DProjectedShadowManager->updateRenderTargetTextures();
 		}
+
+		if (gxPerfTrace) gxdT2 = std::chrono::steady_clock::now();
 
 		// Switch to offscreen RT AFTER pre-render (shadows/water) completes, BEFORE main render.
 		DX8Wrapper::Pillarbox_Begin();
@@ -2177,11 +2279,74 @@ AGAIN:
 				if (numRenderTargetPolygons || numRenderTargetVertices)
 					Debug_Statistics::Record_DX8_Polys_And_Vertices(numRenderTargetPolygons,numRenderTargetVertices,ShaderClass::_PresetOpaqueShader);
 
+				// GeneralsX @build Android port GLES experiment - draw-call
+				// spike fix. Shell::doPush() deliberately does not hide the
+				// previous top-of-stack screen (that's what makes overlays
+				// like the pause menu work), and this draw loop calls
+				// drawViews() -- the full 3D battlefield render, terrain +
+				// units + particles -- unconditionally regardless of what's
+				// on top of the shell stack. Confirmed directly from a
+				// device log: the instant 'Menus/ScoreScreen.wnd' is pushed,
+				// draws/frame jumps from ~250 to 250-1493 and fps craters to
+				// 2.4-17, because the battlefield keeps fully rendering
+				// behind a screen that's fully covering it and about to be
+				// composited over anyway. ScoreScreen is a genuine fullscreen
+				// opaque results screen (not a translucent overlay like the
+				// pause menu), so skipping the world render while it's on
+				// top wastes nothing visible. Kept as a small explicit
+				// allowlist rather than a generic "is this window opaque"
+				// check -- only ScoreScreen has been confirmed by a real
+				// device log to cause this spike.
+				Bool skipViewsForOpaqueShellScreen = FALSE;
+				if (TheShell && TheShell->getScreenCount() > 0)
+				{
+					WindowLayout *topShellScreen = TheShell->top();
+					if (topShellScreen && !topShellScreen->isHidden() &&
+						topShellScreen->getFilename() == AsciiString("Menus/ScoreScreen.wnd"))
+					{
+						skipViewsForOpaqueShellScreen = TRUE;
+					}
+				}
+
 				// draw all views of the world
-				drawViews();
+				if (!skipViewsForOpaqueShellScreen)
+					drawViews();
+
+				if (gxPerfTrace) gxdT3 = std::chrono::steady_clock::now();
+
+				// GeneralsX @bugfix Android port 08/30/2026 EXPERIMENT, PARKED
+				// (disabled) after a real-device A/B test: with this call pair
+				// active, the main menu showed a much wider (and asymmetric)
+				// strip near one screen edge with no UI/border drawn, versus a
+				// barely-visible ~1mm gap (the same pre-existing, harmless
+				// letterbox margin from this device's incidental
+				// game-resolution/backbuffer mismatch) with it disabled. The
+				// device-side viewport/state-cache plumbing (FixedStateKey
+				// includes vpX/Y/W/H, so it does re-apply glViewport on
+				// change) looks correct on inspection, so the actual cause
+				// wasn't root-caused from code reading alone. Since
+				// kPillarboxRenderScale is currently parked at 1.0 (see its
+				// own comment) this split provides no benefit today anyway --
+				// left disabled rather than spending more real-device test
+				// cycles on an architecture change that isn't earning its
+				// keep yet. Revisit together with re-enabling render-scale.
+				// DX8Wrapper::Pillarbox_End();
+				// DX8Wrapper::Pillarbox_Begin_UI();
 
 				// draw the user interface
 				TheInGameUI->DRAW();
+
+				// GeneralsX @build Android port ANGLE experiment - split off
+				// uiPresent's dominant cost: TheInGameUI->DRAW() -> winRepaint()
+				// draws every .wnd control (menus/dialogs), which was ~flat
+				// under system GLES but spikes hugely on ANGLE's Vulkan
+				// backend specifically in control-heavy menus (e.g.
+				// SkirmishGameOptionsMenu) -- likely a lot of distinct
+				// blend/stencil state permutations each forcing ANGLE to
+				// build a new VkPipeline. Splitting this out from mouse/debug
+				// draw + End_Render (the actual present/swap) isolates which
+				// half of the old "uiPresent" number is really the culprit.
+				if (gxPerfTrace) gxdT3b = std::chrono::steady_clock::now();
 
 				// end of video example code
 
@@ -2268,6 +2433,17 @@ AGAIN:
 #endif
 				// render is all done!
 				WW3D::End_Render();
+
+				if (gxPerfTrace)
+				{
+					std::chrono::steady_clock::time_point gxdT4 = std::chrono::steady_clock::now();
+					gxTraceDisplayDrawPhase(
+						std::chrono::duration<double, std::micro>(gxdT1 - gxdT0).count(),
+						std::chrono::duration<double, std::micro>(gxdT2 - gxdT1).count(),
+						std::chrono::duration<double, std::micro>(gxdT3 - gxdT2).count(),
+						std::chrono::duration<double, std::micro>(gxdT3b - gxdT3).count(),
+						std::chrono::duration<double, std::micro>(gxdT4 - gxdT3b).count());
+				}
 			}
 			else
 			{

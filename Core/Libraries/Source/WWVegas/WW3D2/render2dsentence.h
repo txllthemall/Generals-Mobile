@@ -189,6 +189,11 @@ public:
 	~Render2DSentenceClass();
 
 	void				Render ();
+
+	// GeneralsX @perf Android port 09/05/2026 Releases the shared glyph-atlas
+	// recycle pool (see render2dsentence.cpp). Call on device reset/shutdown --
+	// the pool intentionally outlives individual sentence objects.
+	static void		Flush_Recycled_Textures ();
 	virtual	void	Reset ();
 	void				Reset_Polys ();
 

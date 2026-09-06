@@ -43,6 +43,12 @@
 
 #include <d3d8.h>
 #include <d3dx8core.h>
+// GeneralsX @build Android port GLES experiment - texture-churn diagnostic,
+// see the TextureClass(width,height,...) constructor below.
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#include <cstring>
+#endif
 #include "dx8wrapper.h"
 #include "TARGA.h"
 #include <nstrdup.h>
@@ -121,6 +127,38 @@ TextureBaseClass::~TextureBaseClass()
 
 	if (D3DTexture)
 	{
+		// GeneralsX @build Android port GLES experiment - texture-churn
+		// diagnostic. This destructor is the ONLY place in the codebase that
+		// actually releases the underlying GL texture (confirmed:
+		// TextureBaseClass::Invalidate(), the other release site, is only
+		// ever called from Invalidate_Old_Unused_Textures(), which is a
+		// guaranteed no-op on this build since WW3D::Set_Thumbnail_Enabled(false)
+		// is set once at W3DDisplay::init() and never re-enabled during
+		// gameplay). So every real device-texture destroy that shows up as
+		// "deleted" in the [d3d8gles] perf log's texture counter runs
+		// through here. Sampling names (not every single one, to avoid
+		// flooding the log) directly answers what is actually churning --
+		// house-color/HSV-recolor variants ("#...!H...S...V..." munged
+		// names, see W3DAssetManager::Recolor_Texture_One_Time), plain
+		// shared model/terrain textures, or something else entirely --
+		// instead of guessing further from static code reading.
+		static int s_destroyLogCount = 0;
+		static unsigned s_destroyLogNextMs = 0;
+		unsigned nowMs = WW3D::Get_Sync_Time();
+		if (s_destroyLogCount < 200 && nowMs >= s_destroyLogNextMs) {
+			s_destroyLogCount++;
+			s_destroyLogNextMs = nowMs + 50; // at most one line per 50ms
+			// pool: 0=DEFAULT (render targets use this explicitly, see
+			// DX8Wrapper::Create_Render_Target), 1=MANAGED, 2=SYSTEMMEM.
+			// procedural: true for every non-filename constructor (render
+			// targets, raw-surface textures like font3d.cpp/bmp2d.cpp, and
+			// a few others) -- doesn't by itself distinguish which, but
+			// combined with pool it should narrow down the real source of
+			// the unnamed 64x64 churn seen in the previous diagnostic build.
+			fprintf(stderr, "[texchurn] destroy #%d name='%s' %ux%u pool=%d procedural=%d\n",
+				s_destroyLogCount, Get_Texture_Name().str(), Width, Height,
+				(int)Pool, IsProcedural ? 1 : 0);
+		}
 		D3DTexture->Release();
 		D3DTexture = nullptr;
 	}
@@ -598,6 +636,45 @@ TextureClass::TextureClass
 	Initialized=true;
 	IsProcedural=true;
 	IsReducible=false;
+	// GeneralsX @build Android port GLES experiment - texture-churn
+	// diagnostic call-site tag (see ~TextureBaseClass's [texchurn] log).
+	// Every known static call site for this constructor was ruled out
+	// (DX8Wrapper::Create_Render_Target and W3DShroud pass POOL_DEFAULT
+	// explicitly; MetalMapManagerClass sets a name right after
+	// construction; AlphaEdgeTextureClass is 2048px wide and created once
+	// per map load, not per-frame) -- so instead of grepping for more
+	// candidates, print the caller's actual return address here. It can be
+	// resolved to a source line offline against this exact build's
+	// libmain.so via: aarch64-linux-android-addr2line -f -C -e libmain.so <addr>
+	// (or nm/objdump -d if addr2line isn't available), matching this
+	// exact commit so addresses line up.
+#ifdef __ANDROID__
+	{
+		static int s_ctorLogCount = 0;
+		if (s_ctorLogCount < 200) {
+			s_ctorLogCount++;
+			void *retAddr = __builtin_return_address(0);
+			// GeneralsX @build Android port GLES experiment - the raw return
+			// address alone can't be resolved offline (ASLR randomizes where
+			// libmain.so is loaded each run). dladdr() gives the containing
+			// module's load base (dli_fbase) so retAddr-dli_fbase is a stable
+			// file offset into libmain.so, resolvable via:
+			// aarch64-linux-android-addr2line -f -C -e libmain.so <fileoffset>
+			Dl_info info;
+			memset(&info, 0, sizeof(info));
+			uintptr_t fileOffset = 0;
+			if (dladdr(retAddr, &info) && info.dli_fbase) {
+				fileOffset = (uintptr_t)retAddr - (uintptr_t)info.dli_fbase;
+			}
+			fprintf(stderr, "[texchurn] create #%d %ux%u caller=%p module=%s fileoff=0x%lx nearest_sym=%s\n",
+				s_ctorLogCount, width, height, retAddr,
+				info.dli_fname ? info.dli_fname : "?",
+				(unsigned long)fileOffset,
+				info.dli_sname ? info.dli_sname : "?");
+		}
+	}
+#endif
+	Set_Texture_Name("!diag_whf_ctor");
 
 	switch (format)
 	{
@@ -763,6 +840,9 @@ TextureClass::TextureClass
 	IsProcedural=true;
 	Initialized=true;
 	IsReducible=false;
+	// GeneralsX @build Android port GLES experiment - texture-churn
+	// diagnostic call-site tag (see ~TextureBaseClass's [texchurn] log).
+	Set_Texture_Name("!diag_surface_ctor");
 
 	SurfaceClass::SurfaceDescription sd;
 	surface->Get_Description(sd);
@@ -804,6 +884,9 @@ TextureClass::TextureClass(IDirect3DBaseTexture8* d3d_texture)
 	Initialized=true;
 	IsProcedural=true;
 	IsReducible=false;
+	// GeneralsX @build Android port GLES experiment - texture-churn
+	// diagnostic call-site tag (see ~TextureBaseClass's [texchurn] log).
+	Set_Texture_Name("!diag_d3dtex_ctor");
 
 	Set_D3D_Base_Texture(d3d_texture);
 	IDirect3DSurface8* surface;

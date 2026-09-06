@@ -60,6 +60,9 @@
 #include <dlfcn.h>
 #include <adrenotools/driver.h>
 #include <android/api-level.h>
+// GeneralsX @build Android port render-backend picker 07/09/2026 -
+// d3d8gles_ShouldUseVulkanBackend()/d3d8gles_ShouldUseANGLE(), see UseVulkanBackend()/UseANGLE() below.
+#include "d3d8gles.h"
 #endif
 #include <cstdlib>
 #include <cctype>
@@ -136,6 +139,36 @@ extern Int GameMain();
  *
  * GeneralsX @bugfix BenderAI 06/03/2026
  */
+/**
+ * GeneralsX @build Android port render-backend picker 07/09/2026 - the
+ * Vulkan/GLES/GLES+ANGLE decision (render_backend.cfg / env var fallback) is
+ * made once, in d3d8gles_ShouldUseVulkanBackend()/d3d8gles_ShouldUseANGLE()
+ * (Core/Libraries/Source/d3d8gles/src/d3d8gles.cpp -- see d3d8gles.h's
+ * comment on them for why). This used to be its own separate copy of the
+ * same check; it drifted out of sync with dx8wrapper.cpp's copy the moment
+ * the Setup app's picker was added to only one of them, producing a Vulkan
+ * SDL window paired with a GLES D3D8 backend underneath it and a black
+ * screen. Thin wrappers here just adapt the shared bool to this file's
+ * existing UseVulkanBackend()/UseANGLE() call sites.
+ */
+static bool UseVulkanBackend()
+{
+#if defined(__ANDROID__)
+	return d3d8gles_ShouldUseVulkanBackend();
+#else
+	return true;
+#endif
+}
+
+static bool UseANGLE()
+{
+#if defined(__ANDROID__)
+	return d3d8gles_ShouldUseANGLE();
+#else
+	return false;
+#endif
+}
+
 #if !defined(__ANDROID__)
 static void FilterSoftwareVulkanICDs()
 {
@@ -972,6 +1005,54 @@ int main(int argc, char* argv[])
 		// SDL3GameEngine::update() owns the pause so state stays consistent.
 		SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
 #endif
+		// GeneralsX @build Android port ANGLE experiment - useVulkan/useANGLE
+		// only read an env var each, so it's safe to decide before SDL's video
+		// subsystem (and therefore EGL) is initialized. SDL_HINT_EGL_LIBRARY
+		// must be set before SDL_InitSubSystem(SDL_INIT_VIDEO) -- SDL loads EGL
+		// while bringing up the video driver, not lazily at context-creation
+		// time. libEGL_angle.so is bundled in jniLibs alongside libmain.so and
+		// resolves via the app's normal dlopen search path -- no absolute path
+		// needed, and it's named distinctly from libEGL.so so Android's linker
+		// namespace (which reserves that name for the system library) never
+		// gets a say. The matching gl* dispatch is loaded separately, in
+		// WebGLPipeline::initContext(), once the context is current.
+		const bool useVulkan = UseVulkanBackend();
+#if defined(__ANDROID__)
+		if (!useVulkan && UseANGLE()) {
+			SDL_SetHint(SDL_HINT_EGL_LIBRARY, "libEGL_angle.so");
+
+			// GeneralsX @bugfix Android port 08/30/2026 A Redmi Note 8 Pro
+			// (Mali-G76) device log showed the whole-frame vertical-flip bug
+			// that bd2a2379 (gles_pipeline.cpp) already fixed and verified
+			// against the SYSTEM GLES driver reappearing specifically once
+			// this device's GLES backend routed through ANGLE
+			// ("[d3d8gles] GLES backend: libGLESv2_angle.so" in the log).
+			// The same device's Vulkan/DXVK path has never shown this --
+			// DXVK's swapchain creation hardcodes
+			// VkSwapchainCreateInfoKHR::preTransform = IDENTITY
+			// unconditionally (dxvk_presenter.cpp) and just lets
+			// SurfaceFlinger do a compositor-side rotation blit if the
+			// surface's actual currentTransform isn't identity -- always
+			// correct, if marginally less efficient. ANGLE instead reads
+			// the surface's real currentTransform and internally
+			// "pre-rotates" its own rendering (vertex positions, viewport,
+			// scissor, render-pass area -- see ANGLE's SurfaceVk.cpp,
+			// enablePreRotateSurfaces, enabled by default on Android) to
+			// avoid that compositor blit. 90/270-degree pre-rotation is the
+			// common case on portrait-primary phones and well exercised;
+			// 180 degrees (this device apparently reports a landscape
+			// window rotated 180 from what most phones consider forward
+			// landscape -- see the reverted 106cd23 for the same finding
+			// via Android's orientation API) is a much rarer path through
+			// the same ANGLE code and a very plausible place for a
+			// device-specific bug to hide. Disabling this ANGLE feature
+			// makes it fall back to declaring IDENTITY and relying on the
+			// same compositor-blit behavior already confirmed correct via
+			// DXVK on this exact device, instead of ANGLE's own internal
+			// compensation math.
+			setenv("ANGLE_FEATURE_OVERRIDES_DISABLED", "enablePreRotateSurfaces", 1);
+		}
+#endif
 		// GeneralsX @feature Android port 28/08/2026 Initialize the gamepad
 		// subsystem alongside video/audio. SDL_INIT_GAMEPAD implies
 		// SDL_INIT_JOYSTICK; it succeeds with zero controllers connected (the
@@ -982,23 +1063,25 @@ int main(int argc, char* argv[])
 			return 1;
 		}
 
-		// Set DXVK WSI driver before loading Vulkan
-		setenv("DXVK_WSI_DRIVER", "SDL3", 1);
+		if (useVulkan) {
+			// Set DXVK WSI driver before loading Vulkan
+			setenv("DXVK_WSI_DRIVER", "SDL3", 1);
 
-		// GeneralsX @bugfix BenderAI 06/03/2026 - Exclude LLVMpipe Vulkan ICD before loading Vulkan.
-		// libvulkan_lvp.so crashes during static initialization with LLVM 20.x when the Vulkan
-		// loader enumerates all ICDs. Restrict to hardware ICDs first.
+			// GeneralsX @bugfix BenderAI 06/03/2026 - Exclude LLVMpipe Vulkan ICD before loading Vulkan.
+			// libvulkan_lvp.so crashes during static initialization with LLVM 20.x when the Vulkan
+			// loader enumerates all ICDs. Restrict to hardware ICDs first.
 #if !defined(__ANDROID__)
-		// Desktop-Mesa workaround; Android has no ICD JSON directories — the
-		// system Vulkan loader picks the vendor driver (Adreno/Mali) itself.
-		FilterSoftwareVulkanICDs();
+			// Desktop-Mesa workaround; Android has no ICD JSON directories — the
+			// system Vulkan loader picks the vendor driver (Adreno/Mali) itself.
+			FilterSoftwareVulkanICDs();
 #endif
+		}
 		FilterPipeWireOpenAL();
 
 #if defined(__ANDROID__)
-		// Must run before SDL_Vulkan_LoadLibrary()/DXVK's own internal
-		// dlopen("libvulkan.so") below -- see TryLoadCustomVulkanDriver().
-		{
+		if (useVulkan) {
+			// Must run before SDL_Vulkan_LoadLibrary()/DXVK's own internal
+			// dlopen("libvulkan.so") below -- see TryLoadCustomVulkanDriver().
 			const char *internalPath = SDL_GetAndroidInternalStoragePath();
 			if (internalPath != nullptr) {
 				TryLoadCustomVulkanDriver(internalPath);
@@ -1006,16 +1089,51 @@ int main(int argc, char* argv[])
 		}
 #endif
 
-		// Load Vulkan library for DXVK DirectX8→Vulkan translation
-		fprintf(stderr, "INFO: Loading Vulkan library...\n");
-		if (!SDL_Vulkan_LoadLibrary(nullptr)) {
-			fprintf(stderr, "WARNING: Failed to load Vulkan: %s\n", SDL_GetError());
-			fprintf(stderr, "WARNING: Continuing without Vulkan (may use software rendering)\n");
+		if (useVulkan) {
+			// Load Vulkan library for DXVK DirectX8→Vulkan translation
+			fprintf(stderr, "INFO: Loading Vulkan library...\n");
+			if (!SDL_Vulkan_LoadLibrary(nullptr)) {
+				fprintf(stderr, "WARNING: Failed to load Vulkan: %s\n", SDL_GetError());
+				fprintf(stderr, "WARNING: Continuing without Vulkan (may use software rendering)\n");
+			}
+		} else {
+			// GeneralsX @build Android port GLES experiment - GLES3 context
+			// attributes must be set BEFORE SDL_CreateWindow (SDL only applies
+			// them to windows created after this call); the actual GL context
+			// itself is created later, once DX8Wrapper::Init() -> the d3d8gles
+			// backend has a window handle (see WebGLPipeline::initContext).
+			fprintf(stderr, "INFO: Using native GLES3 backend (no Vulkan)\n");
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+			SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+			// GeneralsX @bugfix Android port 09/04/2026 EXPERIMENT (low
+			// confidence): was 0 (opaque, no alpha channel). Real-device
+			// diagnostics ruled out every application-level cause (viewport
+			// application, EGL surface size at creation time -- both
+			// confirmed correct) for a persistent edge strip seen only on
+			// GLES/ANGLE, never Vulkan, at any resolution including an exact
+			// 1:1 match with no pillarboxing involved at all. Alpha=0 is a
+			// comparatively rare, less-traveled EGL config on Android (almost
+			// every GL app requests the standard RGBA8888 config), so it's
+			// worth testing whether SurfaceFlinger/the GPU driver's edge/
+			// display-cutout/rounded-corner composition handles that more
+			// common configuration differently. Vulkan/DXVK's swapchain
+			// likely declares VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR explicitly
+			// (telling the compositor unambiguously to ignore alpha), which
+			// EGL has no equivalent explicit knob for -- its blend behavior
+			// is inferred from the chosen config's alpha bits instead.
+			SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+			SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 		}
 
-		// Create SDL3 window with Vulkan support
-		fprintf(stderr, "INFO: Creating SDL3 Vulkan window...\n");
-		Uint32 windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;  // Start hidden, show after D3D init
+		// Create SDL3 window (Vulkan or OpenGL/GLES surface depending on the backend switch)
+		fprintf(stderr, "INFO: Creating SDL3 %s window...\n", useVulkan ? "Vulkan" : "OpenGL ES");
+		Uint32 windowFlags = (useVulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL) | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;  // Start hidden, show after D3D init
 #if defined(SAGE_MOBILE_PLATFORM)
 		// Request a native-resolution drawable (e.g. 2868x1320 instead of the
 		// 956x440 point size). Without this the swapchain renders at point size and
@@ -1071,10 +1189,42 @@ int main(int argc, char* argv[])
 			// pillarboxed into a portrait window while a later screen in the same
 			// session was already correctly landscape). Poll briefly for the window
 			// to actually report landscape before trusting its size.
-			for (int attempt = 0; attempt < 20; ++attempt) {
+			//
+			// GeneralsX @bugfix Android port 08/31/2026 The original version of this
+			// loop broke as soon as the FIRST landscape-shaped (w>h) reading appeared,
+			// which is not the same as the window having actually finished settling --
+			// on a real device (Redmi Note 8 Pro) this baked xres/yres as 2264x1080,
+			// while the window's true final size (once edge-to-edge/display-cutout
+			// layout finished applying, a few frames later) was 2340x1080. That 76px
+			// gap then became a permanent, if minor, pillarbox letterbox margin for
+			// the whole session.
+			//
+			// GeneralsX @bugfix Android port 08/31/2026, take 2 A first attempt required
+			// only TWO consecutive identical landscape readings (100ms of stability)
+			// before trusting the size -- confirmed via a real-device log
+			// (Pillarbox: game=2264x1080...) that this still wasn't long enough: the
+			// window can apparently report a genuinely STABLE intermediate width for
+			// well over 100ms before a later, asynchronous inset/cutout adjustment
+			// (status/navigation bar animation, WindowInsetsAnimation, etc.) changes
+			// it again. Widened to require FOUR consecutive matches (200ms stable) and
+			// extended the budget to 60 attempts (up to 3s total, vs. 1s before) to
+			// give that later adjustment more room to happen before this loop gives up
+			// and trusts whatever it has. Still fundamentally a best-effort heuristic,
+			// not a guarantee -- the robust fix would be reacting to a real
+			// SDL_EVENT_WINDOW_RESIZED after startup instead of polling once here, but
+			// that's a bigger change than this loop.
+			int prevW = -1, prevH = -1;
+			int stableCount = 0;
+			for (int attempt = 0; attempt < 60; ++attempt) {
 				int w = 0, h = 0;
 				SDL_GetWindowSizeInPixels(TheSDL3Window, &w, &h);
-				if (w > h) break;
+				if (w > h && w == prevW && h == prevH) {
+					if (++stableCount >= 4) break;
+				} else {
+					stableCount = 0;
+				}
+				prevW = w;
+				prevH = h;
 				SDL_PumpEvents();
 				SDL_Delay(50);
 			}
@@ -1103,6 +1253,48 @@ int main(int argc, char* argv[])
 				int yres = winH;
 				int xres = winW;
 				xres &= ~1;  // keep it even
+
+				// GeneralsX @bugfix Android port 09/04/2026 This block injects
+				// -xres/-yres as if the user passed them on the command line, and
+				// CommandLine::parseCommandLineForEngineInit() (which runs AFTER
+				// GameData.ini has already applied any saved Options.ini
+				// "Resolution" preference into TheGlobalData) unconditionally
+				// overwrites m_xResolution/m_yResolution with whatever -xres/-yres
+				// say -- confirmed via real-device logs (Poco F8 Pro) that a
+				// resolution picked in Options, confirmed written to Options.ini
+				// with no I/O error, was silently discarded on the very next
+				// launch because THIS code always re-injects the current window
+				// size regardless. Options.ini itself is a plain "key = value"
+				// per line format (UserPreferences::write()), so read it directly
+				// here (the engine's own preference-loading machinery isn't up
+				// yet at this point in startup) and prefer its saved Resolution
+				// over the window-derived one when present and parseable --
+				// falling back to the window size exactly as before otherwise
+				// (first launch, or a corrupt/missing file).
+				{
+					const char *userDataDir = getenv("GENERALSX_USERDATA_DIR");
+					if (userDataDir) {
+						char optionsPath[512];
+						snprintf(optionsPath, sizeof(optionsPath), "%s/Options.ini", userDataDir);
+						FILE *fp = fopen(optionsPath, "r");
+						if (fp) {
+							char line[256];
+							while (fgets(line, sizeof(line), fp)) {
+								int savedX = 0, savedY = 0;
+								if (sscanf(line, " Resolution = %d %d", &savedX, &savedY) == 2 &&
+								    savedX > 0 && savedY > 0) {
+									xres = savedX & ~1;
+									yres = savedY;
+									fprintf(stderr, "INFO: using saved Resolution %dx%d from Options.ini instead of window size %dx%d\n",
+									        xres, yres, winW, winH);
+									break;
+								}
+							}
+							fclose(fp);
+						}
+					}
+				}
+
 				snprintf(xresVal, sizeof(xresVal), "%d", xres);
 				snprintf(yresVal, sizeof(yresVal), "%d", yres);
 

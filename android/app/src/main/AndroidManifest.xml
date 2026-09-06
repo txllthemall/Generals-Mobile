@@ -2,14 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Vulkan is the entire render path (D3D8 -> DXVK -> Vulkan); refuse to
-         install on devices without a Vulkan 1.1 driver. DXVK's own minimum
-         was lowered from 1.3 to 1.1 (dxvk-vulkan11-adaptive.patch + the
-         Mali-G76 fix series in Patches/), so 1.1 here is now the real
-         runtime floor, not just an install-time gate ahead of a future
-         fallback renderer. A device below 1.1, or with a genuinely broken
-         driver, still gets a readable on-screen error at startup rather
-         than silently failing. -->
     <uses-feature
         android:name="android.hardware.vulkan.version"
         android:version="0x401000"
@@ -18,50 +10,18 @@
         android:name="android.hardware.touchscreen"
         android:required="true" />
 
-    <!-- GeneralsX @build Android port 07/07/2026 "All files access": lets the
-         in-app folder browser (FolderPickerActivity) resolve to a real
-         filesystem path anywhere in shared storage (Downloads, an SD card,
-         wherever the user already has the game files) — no adb push, no
-         restrictive per-folder scoped-storage grants. tools:ignore silences
-         the Play-policy lint warning; this APK is sideloaded, not
-         Play-distributed, so that policy does not apply. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
-
-    <!-- GeneralsX @bugfix Android port 02/08/2026 MANAGE_EXTERNAL_STORAGE and
-         Environment.isExternalStorageManager() only exist from API 30
-         (Android 11) onward. minSdk here is 28, so on Android 9/10 devices
-         onSelectGameFolder()'s isExternalStorageManager() gate is skipped
-         entirely (SDK_INT < R) and FolderPickerActivity opens straight away,
-         but with zero storage permission ever requested, so
-         File.listFiles() on /storage/emulated/0 comes back null/empty and
-         the browser shows nothing but ".. (up)". These are the pre-R
-         runtime-permission equivalent; maxSdkVersion keeps them out of the
-         merged manifest's effective permission set on API 30+, where
-         MANAGE_EXTERNAL_STORAGE already covers everything. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
-
-    <!-- GeneralsX @feature Android port 10/07/2026 GeneralsOnline account
-         login (GeneralsOnlineActivity) and, eventually, the native
-         multiplayer client both need plain outbound HTTPS/WebSocket. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- GeneralsX @bugfix Android port 10/07/2026 the sign-in flow backgrounds
-         this app for the whole browser round-trip (open playgenerals.online,
-         pick Steam/Discord/GameReplays, come back) — on some OEM battery
-         managers the poll timer got throttled hard enough that CheckLogin
-         never got a chance to run, so a login that visibly succeeded on the
-         website never actually completed in the app. Requesting exemption
-         from battery optimization (GeneralsOnlineActivity.onSignIn) fixes
-         that; this is the normal (non-dangerous) permission needed to even
-         show that system prompt. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
+        android:name=".GeneralsApplication"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
@@ -71,38 +31,31 @@
         android:supportsRtl="true"
         android:requestLegacyExternalStorage="false">
 
+        <!-- The normal game icon opens a pre-launch selector. It can launch
+             the base game, launch the remembered secondary mod folder,
+             choose/change it, or clear it. Setup remains a separate icon. -->
         <activity
-            android:name=".GeneralsZHActivity"
+            android:name=".LaunchActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
-            android:launchMode="singleInstance"
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-            android:preferMinimalPostProcessing="true"
-            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@style/Theme.GeneralsZHSettings"
+            android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- GeneralsX @build Android port 07/07/2026 A second, always-present
-             launcher icon: configuring the game folder or reading a crash log
-             must never depend on the game itself having launched successfully.
+        <activity
+            android:name=".GeneralsZHActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:preferMinimalPostProcessing="true"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />
 
-             GeneralsX @bugfix Android port 31/07/2026 Was locked to
-             "landscape" (same as GeneralsZHActivity) to sidestep a real
-             device bug: a portrait->landscape rotation triggered by
-             Setup -> Launch Game could still be settling when the game's
-             native window-size probe (WW3D::Init()) ran, and it read a
-             swapped/portrait window size. Reverted to unspecified
-             (portrait-first, matching FolderPickerActivity/
-             LogViewerActivity/every other non-game screen) since a locked
-             landscape settings menu looked wrong next to those. The race
-             this used to sidestep is now handled explicitly instead:
-             SetupActivity.onLaunchGame() forces landscape and waits for
-             onConfigurationChanged() to actually confirm the rotation
-             completed before starting GeneralsZHActivity, rather than
-             never rotating in the first place. -->
         <activity
             android:name=".SetupActivity"
             android:exported="true"
@@ -148,15 +101,6 @@
             android:theme="@style/Theme.GeneralsZHSettings"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
-        <!-- GeneralsX @bugfix Android port 11/07/2026 LogViewerActivity's
-             Share button used to hand the log over as raw Intent.EXTRA_TEXT,
-             which (a) only works with the handful of apps that accept plain
-             text (no "Save to Files/Downloads/Drive" target ever showed up),
-             and (b) risks TransactionTooLargeException for a big log,
-             silently failing to launch anything. Sharing an actual file via
-             FileProvider fixes both: any app that handles files (including
-             "Save to...") becomes a valid target, and only a small content://
-             Uri crosses the Binder, not the log text itself. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -21,6 +21,11 @@
     <string name="setup_status_folder_line">Dossier du jeu : %1$s\n</string>
     <string name="setup_status_folder_valid">État : semble valide (fichiers d\'archives du jeu trouvés).\n</string>
     <string name="setup_status_folder_invalid">État : ce dossier ne contient PAS les fichiers INIZH.big / INI.big attendus — vérifiez que vous avez choisi le bon dossier.\n</string>
+    <string name="setup_status_folder_incomplete">État : des fichiers d\'archive du jeu ont été trouvés, mais ils semblent incomplets ou corrompus (%1$s) — le jeu plantera probablement au démarrage. Essayez de recopier vos fichiers de jeu depuis une source saine.\n</string>
+    <string name="setup_dialog_folder_problem_title">Problème avec le dossier du jeu</string>
+    <string name="setup_folder_issue_empty_file">%1$s est vide (0 octet)</string>
+    <string name="setup_folder_issue_bad_header">%1$s ne ressemble pas à une archive de jeu valide</string>
+    <string name="setup_folder_issue_missing_data">Il manque des données de jeu attendues dans %1$s — probablement une copie incomplète</string>
     <string name="setup_status_logs_note">Les journaux de plantage/du moteur sont stockés dans le stockage privé de cette application et ne sont accessibles que via « Afficher les journaux » ci-dessus — Android les masque intentionnellement des gestionnaires de fichiers classiques (c\'est le fonctionnement standard du bac à sable Android, pas une particularité de cette application).</string>
 
     <!-- SetupActivity: Language card -->
@@ -40,6 +45,18 @@
     <string name="setup_button_apply_text_size">Appliquer la taille du texte des menus</string>
     <string name="setup_text_size_help">Redimensionne la plupart des textes de boutons/étiquettes de menu selon la résolution de l\'écran. 70 est la valeur par défaut du jeu ; des valeurs plus élevées agrandissent le texte des menus. Prend effet au prochain lancement du jeu, pas immédiatement.</string>
     <string name="setup_toast_text_size_saved">Enregistré. Prendra effet au prochain lancement du jeu.</string>
+
+    <!-- SetupActivity: Render Backend card -->
+    <string name="setup_card_render_backend">Moteur de rendu</string>
+    <string name="setup_render_backend_help">Quelle API graphique le jeu utilise. Prend effet au prochain lancement du jeu, pas immédiatement.\n\nVulkan (recommandé) : le backend d\'origine, le plus testé (via la traduction Direct3D 8 vers Vulkan de DXVK). La plupart des téléphones modernes (séries Snapdragon 8 Gen/Elite et similaires) fonctionnent très bien avec leur pilote d\'origine, sans configuration supplémentaire. La section « Pilote Vulkan personnalisé » ci-dessous est facultative et ne concerne que certaines anciennes puces Adreno dont le pilote d\'origine indique une version inférieure à Vulkan 1.1 — elle n\'est appliquée automatiquement que sur les téléphones qui en ont réellement besoin.\n\nOpenGL ES : une solution de repli native et expérimentale pour les téléphones qui ne peuvent pas du tout utiliser Vulkan (GPU très anciens ou non pris en charge). Fonctionne presque partout, mais nettement plus lent que les deux autres options — à considérer comme un dernier recours, pas un premier choix.\n\nOpenGL ES + ANGLE : le même moteur de rendu expérimental, mais intégré avec ANGLE de Google et acheminé à travers celui-ci (traduit en Vulkan) au lieu du pilote GLES intégré de votre téléphone. Cette version d\'ANGLE est intégrée directement dans cette application — contrairement à la fonctionnalité ANGLE propre au système Android, elle ne nécessite aucune version minimale d\'Android ni interrupteur séparé quelque part dans les paramètres Android de votre téléphone. Nettement plus rapide qu\'OpenGL ES seul une fois lancé, mais peut brièvement ralentir la première fois qu\'un menu avec beaucoup de contrôles (comme les options d\'escarmouche) est ouvert, le temps qu\'ANGLE compile ce dont il a besoin ; le ralentissement disparaît de lui-même et ne revient pas tant que vous ne quittez pas ce menu pour le rouvrir.\n\nLes sections « Pilote Vulkan personnalisé » et « Configuration DXVK » ci-dessous ne s\'affichent que lorsque Vulkan est sélectionné.</string>
+    <string name="setup_render_backend_status">Actuel : %1$s</string>
+    <string name="setup_button_change_render_backend">Changer de moteur de rendu</string>
+    <string name="setup_render_backend_dialog_title">Choisir un moteur de rendu</string>
+    <string name="setup_render_backend_vulkan">Vulkan</string>
+    <string name="setup_render_backend_gles">OpenGL ES (expérimental)</string>
+    <string name="setup_render_backend_gles_angle">OpenGL ES + ANGLE (expérimental)</string>
+    <string name="setup_toast_render_backend_saved">Enregistré. Prendra effet au prochain lancement du jeu.</string>
+    <string name="setup_toast_render_backend_failed">Impossible d\'enregistrer le choix du moteur de rendu : %1$s</string>
 
     <!-- SetupActivity: Custom Vulkan Driver card -->
     <string name="setup_card_vulkan_driver">Pilote Vulkan personnalisé (avancé, GPU Adreno uniquement)</string>
@@ -90,6 +107,7 @@
     <string name="setup_toast_grant_all_files">Accordez « Autoriser l\'accès pour gérer tous les fichiers » sur l\'écran suivant, puis revenez et appuyez à nouveau sur Sélectionner le dossier du jeu.</string>
     <string name="setup_toast_folder_saved">Dossier du jeu enregistré.</string>
     <string name="setup_toast_folder_saved_invalid">Enregistré, mais aucun INIZH.big/INI.big trouvé — vérifiez le dossier.</string>
+    <string name="setup_toast_folder_saved_incomplete">Enregistré, mais certains fichiers du jeu semblent incomplets ou corrompus — consultez les détails sur l\'écran principal avant de lancer le jeu.</string>
     <string name="setup_toast_marker_save_failed">Impossible d\'enregistrer le repère du dossier : %1$s</string>
     <string name="setup_toast_folder_cleared">Réinitialisé. Le jeu utilisera à nouveau son dossier par défaut.</string>
     <string name="setup_toast_options_dir_failed">Impossible de créer le dossier pour Options.ini</string>

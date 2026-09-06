@@ -21,6 +21,11 @@
     <string name="setup_status_folder_line">게임 폴더: %1$s\n</string>
     <string name="setup_status_folder_valid">상태: 유효한 것으로 보입니다 (게임 아카이브 파일 발견).\n</string>
     <string name="setup_status_folder_invalid">상태: 이 폴더에는 예상되는 INIZH.big / INI.big 파일이 없습니다 — 올바른 폴더를 선택했는지 다시 확인하세요.\n</string>
+    <string name="setup_status_folder_incomplete">상태: 게임 아카이브 파일을 찾았지만, 불완전하거나 손상된 것으로 보입니다 (%1$s) — 시작 시 게임이 크래시될 가능성이 높습니다. 깨끗한 소스에서 게임 파일을 다시 복사해 보세요.\n</string>
+    <string name="setup_dialog_folder_problem_title">게임 폴더 문제</string>
+    <string name="setup_folder_issue_empty_file">%1$s 파일이 비어 있습니다 (0바이트)</string>
+    <string name="setup_folder_issue_bad_header">%1$s은(는) 올바른 게임 아카이브로 보이지 않습니다</string>
+    <string name="setup_folder_issue_missing_data">%1$s에 예상되는 게임 데이터가 없습니다 — 불완전한 복사본일 가능성이 있습니다</string>
     <string name="setup_status_logs_note">충돌/엔진 로그는 이 앱의 전용 저장소에 보관되며 위의 \"로그 보기\"를 통해서만 접근할 수 있습니다 — Android는 이를 일반 파일 관리자로부터 의도적으로 숨깁니다 (이는 이 앱만의 특징이 아니라 Android의 표준 샌드박스 동작입니다).</string>
 
     <!-- SetupActivity: Language card -->
@@ -40,6 +45,18 @@
     <string name="setup_button_apply_text_size">메뉴 글자 크기 적용</string>
     <string name="setup_text_size_help">화면 해상도에 맞춰 대부분의 메뉴 버튼/레이블 텍스트 크기를 조정합니다. 70이 게임 자체 기본값이며, 값이 클수록 메뉴 텍스트가 커집니다. 다음에 게임을 실행할 때 적용되며, 즉시 적용되지는 않습니다.</string>
     <string name="setup_toast_text_size_saved">저장되었습니다. 다음에 게임을 실행할 때 적용됩니다.</string>
+
+    <!-- SetupActivity: Render Backend card -->
+    <string name="setup_card_render_backend">렌더 백엔드</string>
+    <string name="setup_render_backend_help">게임이 사용하는 그래픽 API입니다. 다음에 게임을 실행할 때 적용되며, 즉시 적용되지는 않습니다.\n\nVulkan(권장): 가장 오래되고 가장 많이 테스트된 백엔드입니다(DXVK의 Direct3D 8→Vulkan 변환 사용). 대부분의 최신 휴대폰(Snapdragon 8 Gen/Elite 시리즈 등)은 별도 설정 없이 기본 드라이버로도 훌륭하게 작동합니다. 아래의 「사용자 지정 Vulkan 드라이버」 항목은 선택 사항이며, 기본 드라이버가 Vulkan 1.1 미만 버전을 보고하는 일부 구형 Adreno 칩에만 관련이 있습니다 — 실제로 필요한 휴대폰에만 자동으로 적용됩니다.\n\nOpenGL ES: Vulkan을 전혀 사용할 수 없는 휴대폰(매우 오래되었거나 지원되지 않는 GPU)을 위한 네이티브 실험적 대체 수단입니다. 거의 모든 곳에서 작동하지만 다른 두 옵션보다 눈에 띄게 느립니다 — 첫 번째 선택이 아니라 최후의 수단으로 생각하세요.\n\nOpenGL ES + ANGLE: 동일한 실험적 렌더러이지만, 휴대폰에 내장된 GLES 드라이버 대신 Google의 ANGLE을 함께 번들로 포함하여 이를 통해(Vulkan으로 변환되어) 렌더링합니다. 이 ANGLE 빌드는 이 앱 안에 직접 포함되어 있습니다 — Android 자체의 시스템 전역 ANGLE 기능과 달리 최소 Android 버전이나 휴대폰 설정의 별도 전환 스위치가 필요하지 않습니다. 실행되면 일반 OpenGL ES보다 눈에 띄게 빠르지만, 컨트롤이 많은 메뉴(예: 스커미시 옵션)를 처음 열 때 ANGLE이 필요한 것을 컴파일하는 동안 잠깐 끓길 수 있습니다. 이 끓김은 저절로 사라지며, 해당 메뉴를 나갔다가 다시 열기 전까지는 다시 나타나지 않습니다.\n\n아래의 「사용자 지정 Vulkan 드라이버」와 「DXVK 설정」 섹션은 Vulkan을 선택했을 때만 표시됩니다.</string>
+    <string name="setup_render_backend_status">현재: %1$s</string>
+    <string name="setup_button_change_render_backend">렌더 백엔드 변경</string>
+    <string name="setup_render_backend_dialog_title">렌더 백엔드 선택</string>
+    <string name="setup_render_backend_vulkan">Vulkan</string>
+    <string name="setup_render_backend_gles">OpenGL ES (실험적)</string>
+    <string name="setup_render_backend_gles_angle">OpenGL ES + ANGLE (실험적)</string>
+    <string name="setup_toast_render_backend_saved">저장되었습니다. 다음에 게임을 실행할 때 적용됩니다.</string>
+    <string name="setup_toast_render_backend_failed">렌더 백엔드 선택을 저장하지 못했습니다: %1$s</string>
 
     <!-- SetupActivity: Custom Vulkan Driver card -->
     <string name="setup_card_vulkan_driver">사용자 지정 Vulkan 드라이버 (고급, Adreno GPU 전용)</string>
@@ -90,6 +107,7 @@
     <string name="setup_toast_grant_all_files">다음 화면에서 \"모든 파일 관리 접근 허용\"을 허용한 다음 돌아와서 게임 폴더 선택을 다시 누르세요.</string>
     <string name="setup_toast_folder_saved">게임 폴더가 저장되었습니다.</string>
     <string name="setup_toast_folder_saved_invalid">저장되었지만 해당 위치에서 INIZH.big/INI.big을 찾을 수 없습니다 — 폴더를 확인하세요.</string>
+    <string name="setup_toast_folder_saved_incomplete">저장되었지만, 일부 게임 파일이 불완전하거나 손상된 것으로 보입니다 — 실행하기 전에 메인 화면에서 자세한 내용을 확인하세요.</string>
     <string name="setup_toast_marker_save_failed">폴더 표시를 저장할 수 없습니다: %1$s</string>
     <string name="setup_toast_folder_cleared">초기화되었습니다. 게임이 다시 기본 폴더 규칙을 사용합니다.</string>
     <string name="setup_toast_options_dir_failed">Options.ini 폴더를 만들 수 없습니다</string>

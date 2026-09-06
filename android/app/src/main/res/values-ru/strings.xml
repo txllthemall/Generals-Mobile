@@ -67,6 +67,11 @@
     <string name="setup_status_folder_line">Папка с игрой: %1$s\n</string>
     <string name="setup_status_folder_valid">Статус: похоже на верную папку (найдены файлы архивов игры).\n</string>
     <string name="setup_status_folder_invalid">Статус: в этой папке НЕТ ожидаемых INIZH.big / INI.big — проверьте, ту ли папку вы выбрали.\n</string>
+    <string name="setup_status_folder_incomplete">Статус: файлы архивов игры найдены, но выглядят неполными или повреждёнными (%1$s) — игра, скорее всего, вылетит при запуске. Попробуйте перекопировать файлы игры из чистого источника.\n</string>
+    <string name="setup_dialog_folder_problem_title">Проблема с папкой игры</string>
+    <string name="setup_folder_issue_empty_file">%1$s пустой (0 байт)</string>
+    <string name="setup_folder_issue_bad_header">%1$s не похож на корректный архив игры</string>
+    <string name="setup_folder_issue_missing_data">В %1$s не хватает ожидаемых данных игры — вероятно, неполная копия</string>
     <string name="setup_status_logs_note">Логи краша/движка хранятся в приватном хранилище приложения и доступны только через кнопку «Просмотреть логи» выше — Android намеренно скрывает их от обычных файловых менеджеров (это стандартная песочница Android, не особенность этого приложения).</string>
 
     <!-- SetupActivity: Language card -->
@@ -86,6 +91,18 @@
     <string name="setup_button_apply_text_size">Применить размер текста</string>
     <string name="setup_text_size_help">Масштабирует текст большинства кнопок и подписей меню под разрешение экрана. 70 — значение по умолчанию в игре; большие значения увеличивают текст меню. Применяется при следующем запуске игры, не сразу.</string>
     <string name="setup_toast_text_size_saved">Сохранено. Применится при следующем запуске игры.</string>
+
+    <!-- SetupActivity: Render Backend card -->
+    <string name="setup_card_render_backend">Графический бэкенд</string>
+    <string name="setup_render_backend_help">Какой графический API использует игра. Применяется при следующем запуске игры, не сразу.\n\nVulkan (рекомендуется): исходный, наиболее протестированный вариант (через трансляцию Direct3D 8→Vulkan в DXVK). На большинстве современных телефонов (серии Snapdragon 8 Gen/Elite и подобных) отлично работает на встроенном драйвере, без доп. настройки. Раздел «Свой Vulkan-драйвер» ниже не обязателен — он нужен только некоторым старым чипам Adreno, чей штатный драйвер сообщает версию ниже Vulkan 1.1, и применяется автоматически лишь на тех телефонах, которым это реально нужно.\n\nOpenGL ES: нативный экспериментальный запасной вариант для телефонов, которые вообще не могут работать с Vulkan (очень старые или неподдерживаемые GPU). Работает почти везде, но заметно сильнее лагает, чем два других варианта — воспринимайте его как крайний случай, а не выбор по умолчанию.\n\nOpenGL ES + ANGLE: тот же экспериментальный рендерер, но с встроенным ANGLE от Google — рендер идёт через него (транслируется в Vulkan) вместо встроенного GLES-драйвера телефона. Этот ANGLE зашит прямо внутрь приложения — в отличие от системной функции ANGLE в самом Android, тут не нужна ни минимальная версия Android, ни отдельный переключатель где-то в настройках телефона. Заметно быстрее обычного OpenGL ES после запуска, но может ненадолго подтормаживать при первом открытии насыщенного элементами меню (например, настроек скирмиша), пока ANGLE компилирует нужное — подтормаживание проходит само и не повторяется, пока вы не выйдете и не откроете это меню заново.\n\nРазделы «Свой Vulkan-драйвер» и «Настройки DXVK» ниже показываются только при выборе Vulkan.</string>
+    <string name="setup_render_backend_status">Сейчас: %1$s</string>
+    <string name="setup_button_change_render_backend">Изменить графический бэкенд</string>
+    <string name="setup_render_backend_dialog_title">Выберите графический бэкенд</string>
+    <string name="setup_render_backend_vulkan">Vulkan</string>
+    <string name="setup_render_backend_gles">OpenGL ES (экспериментальный)</string>
+    <string name="setup_render_backend_gles_angle">OpenGL ES + ANGLE (экспериментальный)</string>
+    <string name="setup_toast_render_backend_saved">Сохранено. Применится при следующем запуске игры.</string>
+    <string name="setup_toast_render_backend_failed">Не удалось сохранить выбор графического бэкенда: %1$s</string>
 
     <!-- SetupActivity: Custom Vulkan Driver card -->
     <string name="setup_card_vulkan_driver">Свой Vulkan-драйвер (для опытных, только Adreno)</string>
@@ -147,6 +164,7 @@
     <string name="setup_toast_storage_permission_denied">Для выбора папки с игрой требуется разрешение на доступ к хранилищу. Нажмите «Выбрать папку с игрой» ещё раз, чтобы повторить попытку.</string>
     <string name="setup_toast_folder_saved">Папка с игрой сохранена.</string>
     <string name="setup_toast_folder_saved_invalid">Сохранено, но INIZH.big/INI.big там не найдены — проверьте папку.</string>
+    <string name="setup_toast_folder_saved_incomplete">Сохранено, но некоторые файлы игры выглядят неполными или повреждёнными — смотрите детали на главном экране перед запуском.</string>
     <string name="setup_toast_marker_save_failed">Не удалось сохранить метку папки: %1$s</string>
     <string name="setup_toast_folder_cleared">Сброшено. Игра будет использовать папку по умолчанию.</string>
     <string name="setup_toast_options_dir_failed">Не удалось создать папку для Options.ini</string>

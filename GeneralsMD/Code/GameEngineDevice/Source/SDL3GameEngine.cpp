@@ -38,6 +38,8 @@
 #include "GameClient/GameWindow.h"
 #include "GameClient/GameWindowManager.h"
 #include "GameClient/Gadget.h"
+#include "GameClient/Display.h"
+#include "WW3D2/dx8wrapper.h"
 #include "GameClient/View.h"
 #include "GameClient/Shell.h"
 #include "GameClient/InGameUI.h"
@@ -111,14 +113,38 @@ static inline bool mobileShouldPauseRendering()
 	return s_appBackgrounded.load() || s_appInactive.load();
 }
 
+// GeneralsX @build Android port ANGLE experiment - diagnostic logging for the
+// multi-second freeze reported with ANGLE enabled. Root-caused (by reading
+// SDL3's own source, third_party/fetchcontent-src/SDL3-src) to Android's
+// onNativeSurfaceChanged() JNI callback (called from the Java UI thread's
+// surfaceChanged()) recreating the EGL surface via SDL_EGL_CreateSurface --
+// which our own [GX-PERF-DISPLAY]/[d3d8gles] perf timers never see because
+// it happens on the Java thread, blocking our render thread on a mutex, not
+// inside any of our own instrumented render phases. What's NOT yet known is
+// which real Android/system event actually triggers that Surface lifecycle
+// callback mid-session (it's not one of our own SDL_SetWindowFullscreen/
+// SetWindowSize/CreateContext calls -- none of those run outside startup).
+// Logging every window-lifecycle-ish event this watcher already sees (plus a
+// few more that share the "Surface visibility changed" shape) so the next
+// device log can be matched against the freeze by timestamp.
+static void logMobileLifecycleEvent(const char *name)
+{
+	fprintf(stderr, "[GX-LIFECYCLE] %s at t=%ums\n", name, SDL_GetTicks());
+}
+
 static bool SDLCALL mobileLifecycleWatcher(void *userdata, SDL_Event *event)
 {
 	switch (event->type) {
 		case SDL_EVENT_WILL_ENTER_BACKGROUND:
+			logMobileLifecycleEvent("WILL_ENTER_BACKGROUND");
+			s_appBackgrounded.store(true);
+			break;
 		case SDL_EVENT_DID_ENTER_BACKGROUND:
+			logMobileLifecycleEvent("DID_ENTER_BACKGROUND");
 			s_appBackgrounded.store(true);
 			break;
 		case SDL_EVENT_DID_ENTER_FOREGROUND:
+			logMobileLifecycleEvent("DID_ENTER_FOREGROUND");
 			s_appBackgrounded.store(false);
 			break;
 		// Resign/become active. On iOS, SDL maps applicationWillResignActive ->
@@ -126,10 +152,39 @@ static bool SDLCALL mobileLifecycleWatcher(void *userdata, SDL_Event *event)
 		// Stay paused until fully active again (focus regained), which arrives
 		// after DID_ENTER_FOREGROUND.
 		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			logMobileLifecycleEvent("WINDOW_FOCUS_LOST");
 			s_appInactive.store(true);
 			break;
 		case SDL_EVENT_WINDOW_FOCUS_GAINED:
+			logMobileLifecycleEvent("WINDOW_FOCUS_GAINED");
 			s_appInactive.store(false);
+			break;
+		case SDL_EVENT_WINDOW_OCCLUDED:
+			logMobileLifecycleEvent("WINDOW_OCCLUDED");
+			break;
+		case SDL_EVENT_WINDOW_RESTORED:
+			logMobileLifecycleEvent("WINDOW_RESTORED");
+			break;
+		case SDL_EVENT_WINDOW_HIDDEN:
+			logMobileLifecycleEvent("WINDOW_HIDDEN");
+			break;
+		case SDL_EVENT_WINDOW_SHOWN:
+			logMobileLifecycleEvent("WINDOW_SHOWN");
+			break;
+		case SDL_EVENT_WINDOW_EXPOSED:
+			logMobileLifecycleEvent("WINDOW_EXPOSED");
+			break;
+		case SDL_EVENT_WINDOW_MINIMIZED:
+			logMobileLifecycleEvent("WINDOW_MINIMIZED");
+			break;
+		case SDL_EVENT_WINDOW_MAXIMIZED:
+			logMobileLifecycleEvent("WINDOW_MAXIMIZED");
+			break;
+		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+			logMobileLifecycleEvent("WINDOW_PIXEL_SIZE_CHANGED");
+			break;
+		case SDL_EVENT_WINDOW_RESIZED:
+			logMobileLifecycleEvent("WINDOW_RESIZED");
 			break;
 		default:
 			break;
@@ -636,8 +691,35 @@ void handleTouchEvent(SDL_Window *window, const SDL_Event &event)
 {
 	int winW = 0, winH = 0;
 	SDL_GetWindowSize(window, &winW, &winH);
-	const float px = event.tfinger.x * (float)winW;
-	const float py = event.tfinger.y * (float)winH;
+	float px = event.tfinger.x * (float)winW;
+	float py = event.tfinger.y * (float)winH;
+
+	// GeneralsX @bugfix Android port 08/31/2026 px/py above are in REAL
+	// window pixel space (event.tfinger.x/y are normalized [0,1] against the
+	// actual window, per SDL's touch API). Every consumer below --
+	// getWindowUnderCursor() and the GameMessages built by touchPixel() --
+	// expects coordinates in LOGICAL game-resolution space instead, which is
+	// what widget layout and Render2DClass positioning are actually done in
+	// (see dx8wrapper.h's Pillarbox_Begin_UI() comment for the same
+	// distinction on the rendering side). These two spaces were always
+	// identical before today -- Resize_And_Position_Window() used to force
+	// the real SDL window down to match ResolutionWidth/Height on every
+	// resolution change, and prior to adding more resolution options there
+	// was only ever one to begin with -- so this mismatch never had a chance
+	// to surface. Now that a user can pick a resolution smaller than the
+	// real screen (with the window itself correctly left alone, see
+	// Resize_And_Position_Window()'s own comment), touches must be remapped
+	// through the pillarbox destination rect or every widget hit-test lands
+	// on the wrong logical coordinate -- confirmed on a real device: touch
+	// input was entirely unresponsive after switching to a non-native
+	// resolution, exactly what happens when every tap misses its target.
+	{
+		int pbX = 0, pbY = 0, pbW = 0, pbH = 0;
+		if (DX8Wrapper::Pillarbox_Get_Rect(pbX, pbY, pbW, pbH) && pbW > 0 && pbH > 0 && TheDisplay) {
+			px = (px - (float)pbX) * ((float)TheDisplay->getWidth() / (float)pbW);
+			py = (py - (float)pbY) * ((float)TheDisplay->getHeight() / (float)pbH);
+		}
+	}
 
 	// GeneralsX @feature Android port 02/08/2026 Unconditional per-event trace
 	// -- reported "panning freezes mid-drag near my command center/units,
