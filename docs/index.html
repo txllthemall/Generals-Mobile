@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0f14">
+  <title>Generals Mobile v124</title>
+  <meta name="description" content="Command & Conquer Generals: Zero Hour Android port by txllmewhy.">
+  <style>
+    :root{--bg:#080b10;--panel:#0e141c;--panel2:#111923;--text:#eef3f8;--muted:#91a0b0;--line:#1d2a37;--accent:#d7ff46;--shadow:0 24px 80px rgba(0,0,0,.45)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 70% 0%,#182411 0,transparent 32%),linear-gradient(180deg,#080b10 0%,#090d13 100%);color:var(--text);font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+    a{color:inherit}.wrap{width:min(1080px,calc(100% - 32px));margin:0 auto}.nav{display:flex;justify-content:space-between;align-items:center;padding:24px 0}.brand{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.brand span{color:var(--accent)}.nav a{text-decoration:none;color:var(--muted);font-weight:700}.hero{padding:76px 0 54px}.kicker{display:inline-flex;align-items:center;gap:10px;border:1px solid #314118;background:#131b10;padding:8px 12px;border-radius:999px;color:#dfff77;font-weight:800;font-size:13px}.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px var(--accent)}h1{font-size:clamp(48px,9vw,104px);line-height:.92;letter-spacing:-.065em;margin:24px 0 22px;max-width:880px}.accent{color:var(--accent)}.lead{max-width:760px;color:var(--muted);font-size:clamp(18px,2.3vw,24px);margin:0 0 30px}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;padding:15px 20px;border-radius:14px;font-weight:900;text-decoration:none;border:1px solid var(--line)}.primary{background:var(--accent);color:#111700;border-color:var(--accent);box-shadow:0 10px 40px rgba(215,255,70,.16)}.primary:hover{background:#e2ff79}.secondary{background:#111821}.secondary:hover{border-color:#415266}.meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:25px;color:#788796;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:32px 0}.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:var(--shadow)}.card h3{margin:0 0 9px;font-size:19px}.card p{margin:0;color:var(--muted)}.num{font:800 12px/1 ui-monospace,monospace;color:var(--accent);margin-bottom:15px}section{padding:42px 0}.section-title{font-size:clamp(30px,5vw,48px);letter-spacing:-.045em;margin:0 0 22px}.feature-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}.feature{padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:#0d131b;color:#b9c5d1}.feature b{color:#fff}.steps{counter-reset:step;display:grid;gap:12px}.step{counter-increment:step;display:grid;grid-template-columns:48px 1fr;gap:16px;align-items:start;padding:18px;border:1px solid var(--line);border-radius:16px;background:#0c1219}.step:before{content:counter(step);display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#17200f;color:var(--accent);font-weight:900}.step h4{margin:2px 0 4px}.step p{margin:0;color:var(--muted)}.notice{margin:44px 0 10px;padding:20px 22px;border:1px solid #394326;border-radius:16px;background:#11170d;color:#c9d4b2}.footer{padding:42px 0 60px;color:#647383;font-size:14px;border-top:1px solid var(--line);margin-top:52px}.footer a{color:#93a3b3}@media(max-width:760px){.hero{padding-top:42px}.grid,.feature-list{grid-template-columns:1fr}.nav{padding-top:18px}.nav .links{display:none}.card{padding:20px}.actions .btn{width:100%}.meta{gap:9px}.step{grid-template-columns:42px 1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav"><div class="brand">Generals <span>Mobile</span></div><div class="links"><a href="https://github.com/txllthemall/Generals-Mobile">GitHub</a></div></nav>
+    <main>
+      <header class="hero">
+        <div class="kicker"><span class="dot"></span> v124 available now</div>
+        <h1>Zero Hour.<br><span class="accent">On Android.</span></h1>
+        <p class="lead">An Android-first port of Command & Conquer: Generals — Zero Hour with mobile controls, Vulkan/DXVK, GLES3, ANGLE, gamepad support and a secondary mod-folder launcher.</p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/txllthemall/Generals-Mobile/releases/download/v124/Generals-Mobile-v124.apk">Download v124 APK</a>
+          <a class="btn secondary" href="https://github.com/txllthemall/Generals-Mobile/releases/tag/v124">Release notes</a>
+          <a class="btn secondary" href="https://github.com/txllthemall/Generals-Mobile">Source code</a>
+        </div>
+        <div class="meta"><span>ARM64</span><span>Android 9+</span><span>versionCode 124</span><span>SHA-256 f37fca34…35b7d1</span></div>
+      </header>
+      <div class="grid">
+        <article class="card"><div class="num">01 / RENDERING</div><h3>Three renderer paths</h3><p>Vulkan/DXVK by default, plus native GLES3 and GLES3 through ANGLE selectable from Setup.</p></article>
+        <article class="card"><div class="num">02 / MODS</div><h3>Secondary mod folder</h3><p>Launch vanilla or a selected mod without copying files over the original Zero Hour installation.</p></article>
+        <article class="card"><div class="num">03 / MOBILE</div><h3>Built for touch + gamepads</h3><p>Configurable touch hotkeys, SDL3 gamepad support, visible cursor control and both landscape rotations.</p></article>
+      </div>
+      <section><h2 class="section-title">What changed in v124</h2><div class="feature-list"><div class="feature"><b>MYSOREZ v1.2.0 integration</b><br>Rendering, performance and Android improvements ported while keeping Generals Mobile-specific fixes.</div><div class="feature"><b>Mod overlay</b><br>Loose files override matching base files and mod BIG archives load after base archives with override priority.</div><div class="feature"><b>Graphics + performance</b><br>Shadow LOD and multiple rendering-path optimizations from upstream.</div><div class="feature"><b>Smaller APK</b><br>CI strips non-DXVK native debug symbols before packaging.</div><div class="feature"><b>Folder diagnostics</b><br>Improved validation for damaged or incomplete Zero Hour data folders.</div><div class="feature"><b>GeneralsOnline</b><br>Improved session and error handling.</div></div></section>
+      <section><h2 class="section-title">Run a mod</h2><div class="steps"><div class="step"><div><h4>Install v124</h4><p>Install the APK and configure your legally owned Zero Hour game-data folder in Setup.</p></div></div><div class="step"><div><h4>Open the game icon</h4><p>The pre-launch selector offers base game, mod-folder selection and the currently selected mod.</p></div></div><div class="step"><div><h4>Select the mod folder</h4><p>Pick the folder containing the mod files. The original game folder is not modified.</p></div></div><div class="step"><div><h4>Launch selected mod</h4><p>Mod files get priority over matching base assets. Use “Launch base game” whenever you want vanilla Zero Hour.</p></div></div></div></section>
+      <div class="notice"><b>Game files are not included.</b> The APK contains engine code only. You must provide game data from a legally owned copy of Command & Conquer: Generals — Zero Hour.</div>
+    </main>
+    <footer class="footer">Generals Mobile by txllmewhy · <a href="https://github.com/txllthemall/Generals-Mobile">GitHub repository</a> · This project is not affiliated with Electronic Arts.</footer>
+  </div>
+</body>
+</html>
