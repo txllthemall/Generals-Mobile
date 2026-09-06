@@ -1,0 +1,7 @@
+{
+  "version_name": "124",
+  "source_run_id": 34041412570,
+  "artifact_name": "GeneralsXZH-android-run8.apk",
+  "source_sha": "06415a8054887feadb34beaa9a273b0d54b75feb",
+  "release_notes": "## Generals Mobile v124\n\n### Major changes\n- Synced the Android/rendering/performance improvements from MYSOREZ v1.2.0 while preserving Generals Mobile-specific controls, audio fixes and the Adreno allocation workaround.\n- Added selectable Vulkan/DXVK, native GLES3 and GLES3 via ANGLE rendering. Vulkan remains the default.\n- Added a separate secondary mod-folder launcher. Mod loose files and mod BIG archives can override matching base-game assets without copying over or modifying the base installation.\n- Added stale-overlay protection so Setup -> Launch Game always starts the base game even if Android reuses a process that previously launched a mod.\n- Added graphics/performance fixes including shadow LOD and rendering optimizations.\n- Improved game-folder integrity diagnostics and GeneralsOnline session/error handling.\n- CI now strips non-DXVK native debug symbols, substantially reducing APK size.\n\n### Validation\nBuild Android APK run #8 completed successfully on source commit 06415a8054887feadb34beaa9a273b0d54b75feb, including the native build, artifact verification, APK packaging and DT_NEEDED library verification. Physical-device testing of the new mod-overlay path is still recommended for individual mods.\n\nThe APK contains engine code only. You must provide game data from a legally owned copy of Command & Conquer: Generals - Zero Hour."
+}
