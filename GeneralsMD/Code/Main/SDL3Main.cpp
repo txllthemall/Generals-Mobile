@@ -118,7 +118,12 @@ SDL_Window* TheSDL3Window = nullptr;
 // Format %s is replaced with language code in GameTextManager::init()
 // GeneralsX @bugfix BenderAI 13/02/2026 - Fix case-sensitivity on Linux (generals.csf vs Generals.csf)
 const Char *g_csfFile = "data/%s/generals.csf";  ///< CSF file path (lowercase for Linux compatibility)
-const Char *g_strFile = "data/Generals.str";     ///< STR file path
+// GeneralsX @feature Android port 09/09/2026 Per-language, like g_csfFile above it.
+// GameTextManager::init() fills the %s in with the current language, and prefers this
+// plain-text file over the compiled .csf when it exists -- which is what makes a language
+// pack a text file someone can translate and send as a pull request, rather than a binary
+// nobody can review. See languages/README.md.
+const Char *g_strFile = "data/%s/generals.str";  ///< STR file path, per language
 
 // Extern declarations (from GameMain.cpp)
 extern Int GameMain();
@@ -814,6 +819,49 @@ int main(int argc, char* argv[])
 			fprintf(stderr, "WARNING: could not enter game data directory (external storage unavailable?)\n");
 		}
 
+		// GeneralsX @feature Android port 06/09/2026 Optional second folder:
+		// where the BASE Generals archives live. Zero Hour is an expansion and
+		// only ships what it added, so it needs the original game's Terrain.big,
+		// Textures.big, W3D.big and friends alongside its own.
+		//
+		// The engine already knows how to find them -- loadBaseGeneralsAssetsForZH()
+		// in StdBIGFileSystem.cpp -- but its automatic guesses are a sibling
+		// "../Generals" directory and a nested "ZH_Generals" one, in that order,
+		// and it stops at the first that yields anything. A repack that leaves a
+		// sibling Generals folder full of duplicate *ZH.big archives therefore
+		// swallows the search before the real base game is ever reached.
+		//
+		// Dropping the base archives in beside the ZH ones is NOT a fix: archive
+		// precedence is load order, the list is alphabetical, and INI.big sorts
+		// before INIZH.big -- so the base game wins every shared file and Zero
+		// Hour turns into original Generals wearing the expansion's menus. That
+		// first-one-wins rule is also what mods rely on, so it must not change.
+		//
+		// So point the engine straight at the folder instead. CNC_GENERALS_PATH
+		// is the very first thing loadBaseGeneralsAssetsForZH() consults, ahead of
+		// every guess, and setting it here costs the engine nothing. Same plumbing
+		// as the game folder above: the Setup app writes a plain-text marker,
+		// native code reads it before the engine starts.
+		if (internalPath != nullptr) {
+			char basePathMarker[1024];
+			snprintf(basePathMarker, sizeof(basePathMarker), "%s/generals_base_path.txt", internalPath);
+			FILE *baseMarker = fopen(basePathMarker, "r");
+			if (baseMarker != nullptr) {
+				char basePath[900] = {0};
+				if (fgets(basePath, sizeof(basePath), baseMarker) != nullptr) {
+					size_t len = strlen(basePath);
+					while (len > 0 && (basePath[len - 1] == '\n' || basePath[len - 1] == '\r')) {
+						basePath[--len] = '\0';
+					}
+					if (len > 0) {
+						setenv("CNC_GENERALS_PATH", basePath, 1);
+						fprintf(stderr, "INFO: Android base Generals folder (Setup-selected): %s\n", basePath);
+					}
+				}
+				fclose(baseMarker);
+			}
+		}
+
 		// GeneralsX @feature Android port 30/07/2026 Opt-in Vulkan validation
 		// layer, same UX as gx_trace.txt: a tester drops a file named
 		// dxvk_validation.txt into the game data folder (no adb, no rebuild)
@@ -921,8 +969,22 @@ int main(int argc, char* argv[])
 						lang[--len] = '\0';
 					}
 					if (len > 0) {
-						setenv("CNC_ZH_LANGUAGE", lang, 1);
-						fprintf(stderr, "INFO: Game data language override: %s\n", lang);
+						// GeneralsX @bugfix Android port 09/09/2026 Set the TEXT language, not
+						// the game's language.
+						//
+						// This used to export CNC_ZH_LANGUAGE, which is what GetRegistryLanguage()
+						// answers -- and that answer is read by far more than the string table.
+						// It picks the header templates, the font configuration, the command map,
+						// and through them the menu ARTWORK. So selecting Russian did translate
+						// the text, and also swapped Zero Hour's branding for the base Generals
+						// one, because those are the assets the engine could still resolve.
+						//
+						// A language pack is text. It is not a different SKU, and it has no
+						// business deciding which game's logo is on the menu. So it now sets a
+						// variable only the string table reads, and everything else stays on the
+						// language the installed game data actually is.
+						setenv("GENERALSX_TEXT_LANGUAGE", lang, 1);
+						fprintf(stderr, "INFO: Game TEXT language override: %s\n", lang);
 					}
 				}
 				fclose(langMarker);
@@ -1053,12 +1115,7 @@ int main(int argc, char* argv[])
 			setenv("ANGLE_FEATURE_OVERRIDES_DISABLED", "enablePreRotateSurfaces", 1);
 		}
 #endif
-		// GeneralsX @feature Android port 28/08/2026 Initialize the gamepad
-		// subsystem alongside video/audio. SDL_INIT_GAMEPAD implies
-		// SDL_INIT_JOYSTICK; it succeeds with zero controllers connected (the
-		// gamepad event translator in SDL3GameEngine.cpp simply never sees
-		// events in that case), so this is safe for players without one.
-		if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
+		if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
 			fprintf(stderr, "FATAL: Failed to initialize SDL3: %s\n", SDL_GetError());
 			return 1;
 		}

@@ -93,42 +93,37 @@ static const char *ReadRenderBackendConfigFile()
 	return s_value[0] != '\0' ? s_value : nullptr;
 }
 
-// GeneralsX @bugfix Android port 06/09/2026 Preserve Vulkan for existing
-// Generals Mobile installs without a picker file. Resolve both decisions in
-// one place so SDL's window, DX8Wrapper and the GLES dispatch always agree.
-static const char *ResolveRenderBackendChoice()
-{
-	const char *configured = ReadRenderBackendConfigFile();
-	if (configured != nullptr &&
-		(strcmp(configured, "vulkan") == 0 || strcmp(configured, "gles") == 0 ||
-		 strcmp(configured, "gles_angle") == 0)) {
-		return configured;
-	}
-	const char *backend = getenv("GENERALSX_RENDER_BACKEND");
-	if (backend != nullptr && strcmp(backend, "vulkan") == 0) {
-		return "vulkan";
-	}
-	if (backend != nullptr && strcmp(backend, "gles_angle") == 0) {
-		return "gles_angle";
-	}
-	const char *angle = getenv("GENERALSX_GLES_ANGLE");
-	if (angle != nullptr && strcmp(angle, "0") != 0) {
-		return "gles_angle";
-	}
-	if (backend != nullptr && strcmp(backend, "gles") == 0) {
-		return "gles";
-	}
-	return "vulkan";
-}
-
 extern "C" bool d3d8gles_ShouldUseVulkanBackend()
 {
-	return strcmp(ResolveRenderBackendChoice(), "vulkan") == 0;
+	const char *configured = ReadRenderBackendConfigFile();
+	if (configured != nullptr) {
+		return strcmp(configured, "vulkan") == 0;
+	}
+	const char *backend = getenv("GENERALSX_RENDER_BACKEND");
+	return backend != nullptr && strcmp(backend, "vulkan") == 0;
 }
 
 extern "C" bool d3d8gles_ShouldUseANGLE()
 {
-	return strcmp(ResolveRenderBackendChoice(), "gles_angle") == 0;
+	const char *configured = ReadRenderBackendConfigFile();
+	if (configured != nullptr) {
+		return strcmp(configured, "gles_angle") == 0;
+	}
+	// GeneralsX @bugfix Android port 08/30/2026 This used to default to
+	// TRUE (ANGLE on) whenever render_backend.cfg was missing/unreadable --
+	// inconsistent with d3d8gles_ShouldUseVulkanBackend() just above, which
+	// conservatively defaults to FALSE in the same situation. A real device
+	// report (Redmi Note 8 Pro) showed the whole-frame vertical-flip bug
+	// bd2a2379 fixed and verified back on 08/07 -- against the system GLES
+	// driver, before ANGLE existed in this codebase at all -- reappearing;
+	// the device's log confirmed ANGLE ("[d3d8gles] GLES backend:
+	// libGLESv2_angle.so") was active. Whether that came from an explicit
+	// "gles_angle" choice or this exact silent fallback, defaulting an
+	// unconfigured install into an experimental Vulkan-translation layer
+	// nobody opted into defeats the whole point of the picker being
+	// explicit. Default OFF like the Vulkan check now.
+	const char *v = getenv("GENERALSX_GLES_ANGLE");
+	return v != nullptr && strcmp(v, "0") != 0;
 }
 #endif // __ANDROID__
 
@@ -1389,6 +1384,20 @@ public:
 	HRESULT SetRenderTarget(IDirect3DSurface8 *pRenderTarget, IDirect3DSurface8 *pNewZStencil) override
 	{
 		if (pRenderTarget) {
+			// GeneralsX @feature Android port 09/09/2026 One-shot diagnostic. This is the
+			// exact moment W3DShaderManager::endRenderToTexture() hands the scene it just
+			// rendered offscreen to a screen filter, which samples it as a texture. When
+			// the black-and-white cinematic came out solid black there was no way to tell
+			// "the render target is empty" from "the combiner maths is wrong" -- this
+			// prints what is in the render target so the two can never be confused again.
+			// Prints at most 4 times per launch, only for backbuffer-sized targets.
+			if (m_currentRT && m_currentRT != pRenderTarget &&
+			    static_cast<WebGLSurface *>(pRenderTarget) == m_backBuffer &&
+			    m_currentRT->m_ownerTex != nullptr && m_currentRT->m_ownerTex->m_gl.fbo != 0) {
+				WebGLPipeline::get()->debugSampleRenderTarget(m_currentRT->m_ownerTex,
+					"endRenderToTexture");
+			}
+
 			pRenderTarget->AddRef();
 			if (m_currentRT) m_currentRT->Release();
 			m_currentRT = static_cast<WebGLSurface *>(pRenderTarget);

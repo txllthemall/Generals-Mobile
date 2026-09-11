@@ -644,7 +644,26 @@ void GameEngine::init()
 	#endif/////////////////////////////////////////////////////////////////////////////////////////////
 		initSubsystem(TheAudio,"TheAudio", createAudioManager(TheGlobalData->m_headless), nullptr);
 		if (!TheAudio->isMusicAlreadyLoaded())
+		{
+			// GeneralsX @bugfix Android port 06/09/2026 This one missing file used
+			// to end the session outright: init ran to completion, the main menu
+			// was built, and the loop's first check quit -- a black screen, then
+			// the app closing with status 0 and not one line of explanation. A
+			// real report cost a whole debugging session to get this far.
+			//
+			// On desktop the check is a reasonable "the game data was never
+			// installed" guard. On Android people assemble their own file set by
+			// hand, so a single absent music track is both far more likely and far
+			// less serious, and the folder check in the Setup app now covers the
+			// case this was really guarding against. Say what happened and keep
+			// going: a game that runs without music beats one that vanishes.
+			fprintf(stderr, "[gxaudio] music data missing -- see the [gxaudio] line above for the file\n");
+#if defined(__ANDROID__)
+			fprintf(stderr, "[gxaudio] continuing anyway (Android): music may be silent\n");
+#else
 			setQuitting(TRUE);
+#endif
+		}
 
 #if RTS_ZEROHOUR && RETAIL_COMPATIBLE_CRC
 		TheNameKeyGenerator->syncNameKeyID();
@@ -742,7 +761,16 @@ void GameEngine::init()
 
 		AsciiString fname;
 		fname.format("Data\\%s\\CommandMap", GetRegistryLanguage().str());
-		initSubsystem(TheMetaMap,"TheMetaMap", MSGNEW("GameEngineSubsystem") MetaMap(), nullptr, fname.str(), "Data\\INI\\CommandMap");
+		// GeneralsX @bugfix Android port 09/09/2026 Only pass the per-language command map
+		// when it is actually there. initSubsystem() loads it with loadFileDirectory(), which
+		// throws on reading zero files, and Data\<language>\ exists only for the SKUs EA
+		// shipped -- so an unofficial language died here during startup. The real command map
+		// is the second path, Data\INI\CommandMap; the language one is an optional override.
+		AsciiString fnameWithExt = fname;
+		fnameWithExt.concat(".ini");
+		const Bool haveLanguageCommandMap = TheFileSystem->doesFileExist(fnameWithExt.str());
+		initSubsystem(TheMetaMap,"TheMetaMap", MSGNEW("GameEngineSubsystem") MetaMap(), nullptr,
+			haveLanguageCommandMap ? fname.str() : nullptr, "Data\\INI\\CommandMap");
 
 #if defined(RTS_DEBUG)
 		ini.loadFileDirectory("Data\\INI\\CommandMapDebug", INI_LOAD_MULTIFILE, nullptr);
