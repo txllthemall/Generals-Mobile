@@ -1,0 +1,108 @@
+name: One-shot safe MYSOREZ runtime sync
+
+on:
+  push:
+    branches:
+      - recovery/v127-upstream-clean
+
+permissions:
+  contents: write
+
+jobs:
+  sync-runtime:
+    if: ${{ !contains(github.event.head_commit.message, '[runtime-sync]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/v127-upstream-clean
+          fetch-depth: 0
+
+      - name: Fetch current MYSOREZ main
+        run: |
+          git clone --depth 1 --branch main https://github.com/MYSOREZ/GeneralsZH-Android-Port.git /tmp/mysorez
+          git -C /tmp/mysorez rev-parse HEAD
+
+      - name: Copy whitelisted runtime files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            'Core/GameEngine/Source/GameClient/GUI/HeaderTemplate.cpp'
+            'Core/GameEngine/Source/GameClient/GUI/LoadScreen.cpp'
+            'Core/GameEngine/Source/GameClient/GameText.cpp'
+            'Core/GameEngine/Source/GameClient/GlobalLanguage.cpp'
+            'Core/GameEngineDevice/Include/OpenALAudioDevice/OpenALAudioStream.h'
+            'Core/GameEngineDevice/Include/VideoDevice/FFmpeg/FFmpegVideoPlayer.h'
+            'Core/GameEngineDevice/Source/OpenALAudioDevice/OpenALAudioManager.cpp'
+            'Core/GameEngineDevice/Source/OpenALAudioDevice/OpenALAudioStream.cpp'
+            'Core/GameEngineDevice/Source/VideoDevice/FFmpeg/FFmpegFile.cpp'
+            'Core/GameEngineDevice/Source/VideoDevice/FFmpeg/FFmpegVideoPlayer.cpp'
+            'Core/GameEngineDevice/Source/W3DDevice/GameClient/W3DShaderManager.cpp'
+            'Core/Libraries/Include/GXTrace.h'
+            'Core/Libraries/Source/d3d8gles/src/d3d8gles.cpp'
+            'Core/Libraries/Source/d3d8gles/src/gles_pipeline.cpp'
+            'Core/Libraries/Source/d3d8gles/src/gles_pipeline.h'
+            'GeneralsMD/Code/GameEngine/Include/GameClient/GameWindowManager.h'
+            'GeneralsMD/Code/GameEngine/Include/GameClient/InGameUI.h'
+            'GeneralsMD/Code/GameEngine/Source/Common/GameEngine.cpp'
+            'GeneralsMD/Code/GameEngine/Source/GameClient/GUI/GUICallbacks/Menus/MainMenu.cpp'
+            'GeneralsMD/Code/GameEngine/Source/GameClient/GUI/GUICallbacks/ScoreScreen.cpp'
+            'GeneralsMD/Code/GameEngine/Source/GameClient/GUI/GameWindowManager.cpp'
+            'GeneralsMD/Code/GameEngine/Source/GameClient/GameClient.cpp'
+            'GeneralsMD/Code/GameEngine/Source/GameClient/InGameUI.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Include/SDL3Device/GameClient/TouchInput.h'
+            'GeneralsMD/Code/GameEngineDevice/Include/VideoDevice/FFmpeg/FFmpegVideoPlayer.h'
+            'GeneralsMD/Code/GameEngineDevice/Source/SDL3Device/GameClient/TouchInput.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Source/SDL3Device/SDL3GameEngine.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Source/VideoDevice/FFmpeg/FFmpegFile.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Source/VideoDevice/FFmpeg/FFmpegVideoPlayer.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Source/W3DDevice/GameClient/GUI/GUICallbacks/W3DMainMenu.cpp'
+            'GeneralsMD/Code/GameEngineDevice/Source/W3DDevice/GameClient/W3DDisplay.cpp'
+            'GeneralsMD/Code/Main/SDL3Main.cpp'
+          )
+
+          for f in "${files[@]}"; do
+            test -f "/tmp/mysorez/$f" || { echo "Missing upstream file: $f"; exit 1; }
+            mkdir -p "$(dirname "$f")"
+            cp -f "/tmp/mysorez/$f" "$f"
+          done
+
+          printf '%s\n' "${files[@]}" > /tmp/runtime-whitelist.txt
+          git add --pathspec-from-file=/tmp/runtime-whitelist.txt
+
+          echo 'Staged files:'
+          git diff --cached --name-only
+
+          unexpected="$(git diff --cached --name-only | grep -Fvx -f /tmp/runtime-whitelist.txt || true)"
+          if [ -n "$unexpected" ]; then
+            echo 'Unexpected staged paths:'
+            echo "$unexpected"
+            exit 1
+          fi
+
+      - name: Enforce no mod loader / overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e android/app/src/main/java/com/generalsx/zerohour/LaunchActivity.java
+          test ! -e android/app/src/main/java/com/generalsx/zerohour/GeneralsApplication.java
+          if git grep -n 'GENERALSX_MOD_DIR' -- android/app/src/main Core GeneralsMD; then
+            echo 'Forbidden GENERALSX_MOD_DIR reference found in runtime code.'
+            exit 1
+          fi
+
+      - name: Commit exact upstream runtime snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo 'Runtime already matches current MYSOREZ main.'
+            exit 0
+          fi
+          upstream_sha="$(git -C /tmp/mysorez rev-parse HEAD)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "[runtime-sync] recovery: sync safe MYSOREZ runtime ${upstream_sha:0:12}"
+          git push origin HEAD:recovery/v127-upstream-clean
