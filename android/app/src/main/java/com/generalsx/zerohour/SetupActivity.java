@@ -36,17 +36,11 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StyleSpan;
-import android.text.style.UnderlineSpan;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -206,15 +200,9 @@ public class SetupActivity extends Activity {
 
         buildLanguageSection(root);
         buildUiScaleSection(root);
-        buildRenderBackendSection(root);
-        // Custom Vulkan driver / dxvk.conf only matter when Vulkan is the
-        // selected backend -- the GLES/GLES+ANGLE paths never touch DXVK at
-        // all, see Core/Libraries/Source/d3d8gles/CMakeLists.txt.
-        if (RENDER_BACKEND_VULKAN.equals(getRenderBackendChoice())) {
-            applyRecommendedDriverIfNeeded();
-            buildCustomDriverSection(root);
-            buildDxvkConfigSection(root);
-        }
+        applyRecommendedDriverIfNeeded();
+        buildCustomDriverSection(root);
+        buildDxvkConfigSection(root);
         buildDiagnosticsSection(root);
 
         LinearLayout helpCard = startCard(root, getString(R.string.setup_card_how_it_works));
@@ -450,107 +438,6 @@ public class SetupActivity extends Activity {
 
     private void updateUiScaleLabel(int percent) {
         uiScaleLabel.setText(getString(R.string.setup_text_size_label, percent));
-    }
-
-    // GeneralsX @feature Android port render-backend picker 07/09/2026 -
-    // three render backends this branch supports, replacing the previous
-    // adb-only GENERALSX_RENDER_BACKEND/GENERALSX_GLES_ANGLE env vars with a
-    // real in-app choice (most users have no adb at all). Read/written the
-    // same way as CUSTOM_DRIVER_CFG_NAME above: a plain-text marker file in
-    // getFilesDir(), one line, read natively by SDL3Main.cpp's
-    // UseVulkanBackend()/UseANGLE() (and duplicated in gles_pipeline.cpp's
-    // initContext() -- see its comment for why) before the game's video
-    // subsystem starts.
-    private static final String RENDER_BACKEND_CFG_NAME = "render_backend.cfg";
-    private static final String RENDER_BACKEND_VULKAN = "vulkan";
-    private static final String RENDER_BACKEND_GLES = "gles";
-    private static final String RENDER_BACKEND_GLES_ANGLE = "gles_angle";
-
-    private TextView renderBackendStatusView;
-
-    // No config file yet (fresh install) means "whatever UseVulkanBackend()/
-    // UseANGLE() default to today when their env vars are unset" -- GLES,
-    // per SDL3Main.cpp's own comment on why this branch defaults there.
-    // Deliberately NOT auto-detecting "the best backend for this device"
-    // here: preserves today's actual behavior for existing installs instead
-    // of silently switching anyone's renderer the next time Setup runs.
-    // GeneralsX @bugfix Android port 06/09/2026 Match the native Vulkan
-    // fallback so upgrading v123 does not silently switch renderers.
-    private String getRenderBackendChoice() {
-        File cfg = new File(getFilesDir(), RENDER_BACKEND_CFG_NAME);
-        if (!cfg.isFile()) {
-            return RENDER_BACKEND_VULKAN;
-        }
-        String value = readFirstLine(cfg);
-        if (RENDER_BACKEND_GLES.equals(value) || RENDER_BACKEND_GLES_ANGLE.equals(value)) {
-            return value;
-        }
-        return RENDER_BACKEND_VULKAN;
-    }
-
-    private String renderBackendLabel(String choice) {
-        switch (choice) {
-            case RENDER_BACKEND_VULKAN:
-                return getString(R.string.setup_render_backend_vulkan);
-            case RENDER_BACKEND_GLES_ANGLE:
-                return getString(R.string.setup_render_backend_gles_angle);
-            default:
-                return getString(R.string.setup_render_backend_gles);
-        }
-    }
-
-    private void buildRenderBackendSection(LinearLayout root) {
-        LinearLayout content = startCard(root, getString(R.string.setup_card_render_backend));
-
-        renderBackendStatusView = new TextView(this);
-        renderBackendStatusView.setText(getString(R.string.setup_render_backend_status, renderBackendLabel(getRenderBackendChoice())));
-        renderBackendStatusView.setPadding(0, 0, 0, dp(8));
-        content.addView(renderBackendStatusView);
-
-        addButton(content, getString(R.string.setup_button_change_render_backend), this::onChangeRenderBackend);
-
-        TextView help = new TextView(this);
-        help.setAlpha(0.8f);
-        help.setText(R.string.setup_render_backend_help);
-        content.addView(help);
-    }
-
-    private void onChangeRenderBackend() {
-        String[] choices = { RENDER_BACKEND_VULKAN, RENDER_BACKEND_GLES, RENDER_BACKEND_GLES_ANGLE };
-        String[] labels = new String[choices.length];
-        for (int i = 0; i < choices.length; i++) {
-            labels[i] = renderBackendLabel(choices[i]);
-        }
-        String current = getRenderBackendChoice();
-        int currentIndex = 0;
-        for (int i = 0; i < choices.length; i++) {
-            if (choices[i].equals(current)) {
-                currentIndex = i;
-                break;
-            }
-        }
-        new android.app.AlertDialog.Builder(this)
-            .setTitle(R.string.setup_render_backend_dialog_title)
-            .setSingleChoiceItems(labels, currentIndex, (dialog, which) -> {
-                File cfg = new File(getFilesDir(), RENDER_BACKEND_CFG_NAME);
-                try (java.io.FileWriter w = new java.io.FileWriter(cfg, false)) {
-                    w.write(choices[which]);
-                    w.write("\n");
-                } catch (java.io.IOException e) {
-                    Toast.makeText(this, getString(R.string.setup_toast_render_backend_failed, e.getMessage()), Toast.LENGTH_LONG).show();
-                    dialog.dismiss();
-                    return;
-                }
-                dialog.dismiss();
-                Toast.makeText(this, R.string.setup_toast_render_backend_saved, Toast.LENGTH_LONG).show();
-                // The Custom Vulkan Driver / DXVK Config cards below are only
-                // relevant for the Vulkan backend -- recreate() re-runs
-                // buildUi() so they show/hide immediately, same pattern
-                // onChangeLanguage() already uses for its own dialog.
-                recreate();
-            })
-            .setNegativeButton(R.string.common_cancel, null)
-            .show();
     }
 
     // GeneralsX @feature Android port 10/07/2026 Optional custom Vulkan
@@ -1249,56 +1136,20 @@ public class SetupActivity extends Activity {
         root.addView(b, lp);
     }
 
-    // GeneralsX @feature Android port game-folder-integrity-check 07/09/2026
-    // Plain text made "not set"/"looks valid"/"looks incomplete" too easy to
-    // miss right after picking a folder -- the status line is now bold,
-    // underlined and colored (green/amber/red) so it reads as a clear
-    // verdict at a glance instead of blending into the paragraph around it.
-    // The invalid/incomplete cases additionally get a blocking AlertDialog
-    // right after picking (see onActivityResult()), since even a colored
-    // line can be scrolled past unnoticed but a dialog can't.
     private void refreshStatus() {
         String path = getSavedGamePath();
-        SpannableStringBuilder sb = new SpannableStringBuilder();
+        StringBuilder sb = new StringBuilder();
         if (path == null) {
             sb.append(getString(R.string.setup_status_folder_not_set));
         } else {
-            File dir = new File(path);
-            boolean valid = isValidGameFolder(dir);
+            boolean valid = isValidGameFolder(new File(path));
             sb.append(getString(R.string.setup_status_folder_line, path));
-            int statusStart = sb.length();
-            int statusColorRes;
-            if (!valid) {
-                sb.append(getString(R.string.setup_status_folder_invalid));
-                statusColorRes = R.color.gzh_status_error;
-            } else {
-                java.util.List<String> issues = findGameFolderIntegrityIssues(dir);
-                if (issues.isEmpty()) {
-                    sb.append(getString(R.string.setup_status_folder_valid));
-                    statusColorRes = R.color.gzh_status_ok;
-                } else {
-                    sb.append(getString(R.string.setup_status_folder_incomplete, String.join("; ", issues)));
-                    statusColorRes = R.color.gzh_status_warn;
-                }
-            }
-            int statusEnd = sb.length();
-            sb.setSpan(new ForegroundColorSpan(ContextCompat.getColor(this, statusColorRes)),
-                statusStart, statusEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            sb.setSpan(new StyleSpan(Typeface.BOLD), statusStart, statusEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            sb.setSpan(new UnderlineSpan(), statusStart, statusEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.append(getString(valid ? R.string.setup_status_folder_valid : R.string.setup_status_folder_invalid));
         }
         sb.append('\n');
         sb.append(getString(R.string.setup_status_logs_note));
-        statusText.setText(sb);
+        statusText.setText(sb.toString());
         updateGameLanguageStatusView();
-    }
-
-    private void showFolderProblemDialog(String message) {
-        new android.app.AlertDialog.Builder(this)
-            .setTitle(R.string.setup_dialog_folder_problem_title)
-            .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
-            .show();
     }
 
     private String getSavedGamePath() {
@@ -1363,186 +1214,6 @@ public class SetupActivity extends Activity {
         return false;
     }
 
-    // GeneralsX @feature Android port game-folder-integrity-check 07/09/2026
-    // isValidGameFolder() above only checks that INIZH.big/INI.big EXIST --
-    // a truncated/incomplete copy (interrupted transfer, bad extraction,
-    // etc.) can pass that check while still crashing the engine deep in
-    // INI::loadFileDirectory() the first time it hits a directory whose
-    // data never made it into the archive: a real user report hit
-    // "[INI] ERROR: No files read from directory 'Data\INI\Default\Weather'"
-    // followed by an uncaught C++ exception during GameEngine::init() --
-    // well before any graphics/Vulkan code runs, so it isn't a driver bug.
-    // The same broken copy also failed the same way in Winlator (a
-    // completely different Wine/DXVK compatibility layer), confirming it's
-    // the user's own file set, not this port's code.
-    //
-    // These two checks stay cheap by only reading each .big's small BIGF
-    // directory table (a header + a null-terminated path per entry), never
-    // the actual multi-hundred-MB file payloads the table points at:
-    //   1. Every *.big already present must start with the "BIGF" magic
-    //      and be non-zero size (catches an empty/corrupted download).
-    //   2. Whichever ini archive is present (INI.big or INIZH.big) must
-    //      contain Data/INI/Default/Weather.ini specifically -- the exact
-    //      file the real crash above needed, and a reasonable proxy for
-    //      "this archive's directory table wasn't truncated partway
-    //      through", since an interrupted copy would most likely lose
-    //      entries somewhere in the middle of the table, not leave out
-    //      exactly and only this one file.
-    //
-    // BIG format read from this project's own parser --
-    // Core/GameEngineDevice/Source/StdDevice/Common/StdBIGFileSystem.cpp,
-    // openArchiveFile(): "BIGF" magic at offset 0, file count (big-endian)
-    // at offset 8, directory table starting at offset 0x10, each entry is
-    // [4-byte offset, big-endian][4-byte size, big-endian][null-terminated
-    // backslash-separated path].
-    private static final String BIG_CRITICAL_ENTRY = "data\\ini\\default\\weather.ini";
-
-    // GeneralsX @bugfix Android port game-folder-integrity-check 08/30/2026
-    // Some retail/Deluxe layouts don't put the base Generals archives (incl.
-    // INI.big) next to the ZH ones -- they nest an entire base-game copy in
-    // a subfolder instead (confirmed via real "Generals Deluxe" install
-    // screenshots: root has INIZH.big + *ZH.big, and a "ZH_Generals"
-    // subfolder has a plain INI.big alongside unsuffixed archives). The
-    // engine itself already expects layouts like this -- see
-    // loadBaseGeneralsAssetsForZH() in StdBIGFileSystem.cpp, which tries a
-    // handful of base-game locations including a "ZH_Generals" sibling --
-    // but that folder name isn't the only one real installers have used
-    // over the years, so rather than hardcode it, scan every immediate
-    // subfolder of the selected directory for ini archives. One level deep
-    // only: cheap (just a directory listing per subfolder), and matches
-    // what the engine itself is willing to look for automatically.
-    private java.util.List<String> findGameFolderIntegrityIssues(File dir) {
-        java.util.List<String> issues = new java.util.ArrayList<>();
-        if (dir == null || !dir.isDirectory()) {
-            return issues;
-        }
-        java.util.List<File> scanRoots = new java.util.ArrayList<>();
-        scanRoots.add(dir);
-        File[] subdirs = dir.listFiles(File::isDirectory);
-        if (subdirs != null) {
-            for (File sub : subdirs) {
-                scanRoots.add(sub);
-            }
-        }
-
-        // GeneralsX @bugfix Android port game-folder-integrity-check 07/09/2026
-        // INI.big (base Generals) and INIZH.big (the Zero Hour expansion)
-        // both get loaded and merged into one virtual file list by the
-        // engine's ArchiveFileSystem -- they don't replace each other, ZH
-        // only overrides/adds specific entries on top of the base game's.
-        // Weather.ini is base-game content, not something Zero Hour
-        // replaces, so on an install with both archives it can legitimately
-        // live in INI.big while INIZH.big itself is missing/corrupted --
-        // checking only whichever one was found last would have produced a
-        // false "missing data" report. Collect every present ini archive
-        // (root and any subfolder alike) and only flag a problem if NONE of
-        // them have the entry, matching how the actual merged filesystem
-        // resolves it.
-        java.util.List<File> iniArchives = new java.util.ArrayList<>();
-        for (File root : scanRoots) {
-            File[] bigFiles = root.listFiles((d, name) -> name.toLowerCase(java.util.Locale.ROOT).endsWith(".big"));
-            if (bigFiles == null) {
-                continue;
-            }
-            String prefix = (root == dir) ? "" : (root.getName() + "\\");
-            for (File f : bigFiles) {
-                if (f.length() == 0) {
-                    issues.add(getString(R.string.setup_folder_issue_empty_file, prefix + f.getName()));
-                    continue;
-                }
-                if (!hasBigFHeader(f)) {
-                    issues.add(getString(R.string.setup_folder_issue_bad_header, prefix + f.getName()));
-                    continue;
-                }
-                String lower = f.getName().toLowerCase(java.util.Locale.ROOT);
-                if (lower.equals("ini.big") || lower.equals("inizh.big")) {
-                    iniArchives.add(f);
-                }
-            }
-        }
-        if (!iniArchives.isEmpty()) {
-            boolean found = false;
-            for (File f : iniArchives) {
-                if (bigArchiveHasEntry(f, BIG_CRITICAL_ENTRY)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                StringBuilder names = new StringBuilder();
-                for (File f : iniArchives) {
-                    if (names.length() > 0) {
-                        names.append(", ");
-                    }
-                    File parent = f.getParentFile();
-                    boolean nested = parent != null && !parent.equals(dir);
-                    names.append(nested ? (parent.getName() + "\\" + f.getName()) : f.getName());
-                }
-                issues.add(getString(R.string.setup_folder_issue_missing_data, names.toString()));
-            }
-        }
-        return issues;
-    }
-
-    private static boolean hasBigFHeader(File f) {
-        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
-            byte[] magic = new byte[4];
-            if (raf.read(magic) != 4) {
-                return false;
-            }
-            return magic[0] == 'B' && magic[1] == 'I' && magic[2] == 'G' && magic[3] == 'F';
-        } catch (java.io.IOException e) {
-            return false;
-        }
-    }
-
-    private static int readBigEndianInt(java.io.RandomAccessFile raf) throws java.io.IOException {
-        int b0 = raf.read(), b1 = raf.read(), b2 = raf.read(), b3 = raf.read();
-        if ((b0 | b1 | b2 | b3) < 0) {
-            throw new java.io.EOFException();
-        }
-        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
-    }
-
-    private static boolean bigArchiveHasEntry(File bigFile, String targetLowerPath) {
-        if (!bigFile.isFile() || bigFile.length() < 0x10) {
-            return false;
-        }
-        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(bigFile, "r")) {
-            if (!hasBigFHeader(bigFile)) {
-                return false;
-            }
-            raf.seek(8);
-            int numFiles = readBigEndianInt(raf);
-            if (numFiles < 0 || numFiles > 500000) {
-                return false;  // sanity guard against a corrupted/garbage header
-            }
-            raf.seek(0x10);
-            byte[] nameBuf = new byte[512];
-            for (int i = 0; i < numFiles; i++) {
-                raf.skipBytes(8);  // per-entry offset + size, not needed for this check
-                int len = 0;
-                int b;
-                while ((b = raf.read()) > 0) {
-                    if (len < nameBuf.length - 1) {
-                        nameBuf[len++] = (byte) b;
-                    }
-                }
-                if (b < 0) {
-                    return false;  // ran off the end of the file mid-entry -- truncated archive
-                }
-                String path = new String(nameBuf, 0, len, java.nio.charset.StandardCharsets.US_ASCII)
-                    .toLowerCase(java.util.Locale.ROOT);
-                if (path.equals(targetLowerPath)) {
-                    return true;
-                }
-            }
-        } catch (java.io.IOException e) {
-            return false;
-        }
-        return false;
-    }
-
     private static final int REQUEST_LEGACY_STORAGE_PERMISSION = 1003;
 
     private void onSelectGameFolder() {
@@ -1593,27 +1264,10 @@ public class SetupActivity extends Activity {
             if (path != null) {
                 saveGamePath(path);
                 refreshStatus();
-                File dir = new File(path);
-                boolean valid = isValidGameFolder(dir);
-                // GeneralsX @feature Android port game-folder-integrity-check
-                // 07/09/2026 - a Toast auto-dismisses in a couple of seconds
-                // and is easy to miss entirely; a real problem here means
-                // the game WILL crash on launch, so it gets a blocking
-                // dialog the user has to acknowledge instead. The colored
-                // status line in refreshStatus() (visible right below) still
-                // covers "I want to re-check the status later" without
-                // re-triggering the dialog every time the screen redraws.
-                if (!valid) {
-                    showFolderProblemDialog(getString(R.string.setup_status_folder_invalid).trim());
-                } else {
-                    java.util.List<String> issues = findGameFolderIntegrityIssues(dir);
-                    if (!issues.isEmpty()) {
-                        showFolderProblemDialog(getString(R.string.setup_status_folder_incomplete,
-                            String.join("; ", issues)).trim());
-                    } else {
-                        Toast.makeText(this, R.string.setup_toast_folder_saved, Toast.LENGTH_LONG).show();
-                    }
-                }
+                boolean valid = isValidGameFolder(new File(path));
+                Toast.makeText(this,
+                    valid ? R.string.setup_toast_folder_saved : R.string.setup_toast_folder_saved_invalid,
+                    Toast.LENGTH_LONG).show();
             }
         } else if (requestCode == REQUEST_IMPORT_DRIVER && resultCode == Activity.RESULT_OK && data != null) {
             Uri uri = data.getData();

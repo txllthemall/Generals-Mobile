@@ -10,8 +10,7 @@ of scope.
 - Build workflow: `.github/workflows/build-android.yml`
 - CMake preset: `android-vulkan`
 - Package id: `com.generalsx.zerohour`
-- Latest published generation before new changes: v123
-- Current source version: v124; imports upstream v1.2.0 (see `docs/port/UPSTREAM_V1_2_0.md`)
+- Latest published generation before new changes: v122
 - Minimum Android API: 28
 - Native ABI: `arm64-v8a`
 
@@ -22,7 +21,6 @@ of scope.
 - Both landscape orientations.
 - Android task-navigation/fullscreen fixes.
 - DXVK Vulkan rendering with Adreno and Mali compatibility patches.
-- Selectable native GLES and GLES+ANGLE rendering; Vulkan remains the default.
 - Android allocation-pool workaround for the observed Adreno free-list crash.
 - OpenAL lifecycle fixes and Android setup/log tooling.
 

@@ -29,7 +29,7 @@ The goal is simple: **make Zero Hour feel like an actual Android game instead of
 ## Features
 
 - **Native Android ARM64 build**
-- **Vulkan rendering through DXVK, plus selectable GLES and GLES+ANGLE backends**
+- **Vulkan rendering through DXVK**
 - **Touch controls designed for Zero Hour**
 - **In-game touch button editor**
 - **Gamepad support**
@@ -41,18 +41,7 @@ The goal is simple: **make Zero Hour feel like an actual Android game instead of
 - **Optional custom Vulkan driver loading support**
 - **Automated Android APK builds through GitHub Actions**
 
-## Upcoming v124 source changes
-
-Integrated the engine and Android improvements through
-[MYSOREZ v1.2.0](https://github.com/MYSOREZ/GeneralsZH-Android-Port/releases/tag/v1.2.0):
-GLES/ANGLE rendering and UI performance fixes, DXT texture decoding, folder-integrity
-checks, clearer online-login errors, dynamic shadow LOD and improved crash diagnostics.
-Vulkan remains the default. Generals Mobile touch controls, gamepad cursor, rotation,
-audio and Adreno allocation fixes are preserved.
-
-See [integration and validation notes](docs/port/UPSTREAM_V1_2_0.md).
-
-## Latest published release: v123
+## v123
 
 The current Android generation is **version code 123**. It turns the repository
 into an Android-only product tree, removes checked-in release binaries and obsolete
@@ -82,7 +71,7 @@ OpenAL source and buffer lifecycle fixes prevent stale buffers from remaining at
 ## Requirements
 
 - 64-bit Android device (`arm64-v8a`)
-- Vulkan-capable GPU and driver for DXVK/ANGLE, or OpenGL ES 3.0 for native GLES
+- Vulkan-capable GPU and driver
 - A legally owned Zero Hour installation for game data
 - Sufficient free storage for the APK, native libraries and game files
 
@@ -106,8 +95,7 @@ The workflow builds the engine, Android native dependencies and DXVK integration
 | Android ARM64 | **Primary platform** |
 | Touch UI / controls | **Active development** |
 | Gamepad | **Supported** |
-| Vulkan / DXVK | **Default** |
-| GLES / GLES+ANGLE | Available in v124 source; device validation pending |
+| Vulkan / DXVK | **Active** |
 | OpenAL audio | **Active** |
 | Adreno 840 | **Tested** |
 | Other ARM64 Vulkan devices | Community testing needed |
